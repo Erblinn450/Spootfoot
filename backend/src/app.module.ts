@@ -6,7 +6,7 @@ import { SlotsModule } from './slots/slots.module';
 import { ReservationsModule } from './reservations/reservations.module';
 import { InvitationsModule } from './invitations/invitations.module';
 
-const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/spotfoot';
+const mongoUri = process.env.MONGODB_URI || 'mongodb://mongo:27017/spotfoot';
 
 @Module({
   imports: [

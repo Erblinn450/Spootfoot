@@ -1,6 +1,6 @@
 # SpotFoot
 
-[![CI](https://github.com/Erblinn450/spootfoot/actions/workflows/ci.yml/badge.svg)](https://github.com/Erblinn450/spootfoot/actions/workflows/ci.yml)
+[![CI](https://github.com/Erblinn450/Spootfoot/actions/workflows/ci.yml/badge.svg)](https://github.com/Erblinn450/Spootfoot/actions/workflows/ci.yml)
 
 Permettre à un joueur de réserver un créneau de 1h sur un terrain (capacité 10), puis partager un lien d’invitation ouvert pour que ses amis confirment "Je viens / Je ne peux pas".
 
