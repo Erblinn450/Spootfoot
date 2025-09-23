@@ -1,13 +1,20 @@
 import { Body, Controller, Headers, HttpException, HttpStatus, Post } from '@nestjs/common';
+import { ApiHeader, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { SlotsService } from './slots.service';
+import { CreateSlotDto } from './dto/create-slot.dto';
 
+@ApiTags('admin/slots')
+@ApiHeader({ name: 'x-admin-token', required: true, description: 'Admin token' })
 @Controller('admin/slots')
 export class AdminSlotsController {
   constructor(private readonly slotsService: SlotsService) {}
 
   @Post()
+  @ApiResponse({ status: 201, description: 'Slot créé (status OPEN)' })
+  @ApiResponse({ status: 400, description: 'terrainId and startAt required' })
+  @ApiResponse({ status: 401, description: 'Unauthorized (x-admin-token manquant ou invalide)' })
   async create(
-    @Body() body: { terrainId: string; startAt: string; durationMin?: number; capacity?: number },
+    @Body() body: CreateSlotDto,
     @Headers('x-admin-token') token?: string,
   ) {
     const expected = process.env.ADMIN_TOKEN || 'dev-admin-token';

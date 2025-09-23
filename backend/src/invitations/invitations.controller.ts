@@ -1,8 +1,10 @@
 import { Controller, Get, HttpException, HttpStatus, Param, Post } from '@nestjs/common';
+import { ApiResponse, ApiTags } from '@nestjs/swagger';
 import crypto from 'node:crypto';
 import { ReservationsService } from '../reservations/reservations.service';
 import { SlotsService } from '../slots/slots.service';
 
+@ApiTags('invitations')
 @Controller('invitations')
 export class InvitationsController {
   constructor(
@@ -15,6 +17,8 @@ export class InvitationsController {
   }
 
   @Get(':token')
+  @ApiResponse({ status: 200, description: "Infos d'invitation (slot + places restantes)" })
+  @ApiResponse({ status: 404, description: 'Invitation introuvable ou slot introuvable' })
   async getInfo(@Param('token') token: string) {
     const tokenHash = this.hash(token);
     const reservation = await this.reservationsService.findByTokenHash(tokenHash);
@@ -34,6 +38,9 @@ export class InvitationsController {
   }
 
   @Post(':token/accept')
+  @ApiResponse({ status: 200, description: 'Acceptation enregistrée; retourne acceptedCount' })
+  @ApiResponse({ status: 404, description: 'Invitation introuvable ou slot introuvable' })
+  @ApiResponse({ status: 409, description: 'Capacité atteinte (FULL)' })
   async accept(@Param('token') token: string) {
     const tokenHash = this.hash(token);
     const reservation = await this.reservationsService.findByTokenHash(tokenHash);
@@ -55,7 +62,9 @@ export class InvitationsController {
   }
 
   @Post(':token/decline')
-  async decline() {
+  @ApiResponse({ status: 204, description: 'Déclinaison enregistrée (no-op)' })
+  @ApiResponse({ status: 404, description: 'Invitation introuvable' })
+  decline() {
     // No-op by spec
     return { statusCode: 204 };
   }
