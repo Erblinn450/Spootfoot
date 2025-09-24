@@ -22,16 +22,38 @@ export class ReservationsService {
     const token = uuidv4();
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-    const session = await this.reservationModel.db.startSession();
-    try {
-      await session.withTransaction(async () => {
-        // Create reservation
-        await this.reservationModel.create([{ slotId: new Types.ObjectId(data.slotId), organizerEmail: data.organizerEmail, tokenHash, acceptedCount: 0 }], { session });
-        // Update slot to RESERVED
-        await this.slotsService.setStatus(data.slotId, 'RESERVED');
+    const useTransactions = (process.env.USE_TRANSACTIONS || 'false').toLowerCase() === 'true';
+    if (useTransactions) {
+      const session = await this.reservationModel.db.startSession();
+      try {
+        await session.withTransaction(async () => {
+          // Create reservation
+          await this.reservationModel.create(
+            [
+              {
+                slotId: new Types.ObjectId(data.slotId),
+                organizerEmail: data.organizerEmail,
+                tokenHash,
+                acceptedCount: 0,
+              },
+            ],
+            { session },
+          );
+          // Update slot to RESERVED
+          await this.slotsService.setStatus(data.slotId, 'RESERVED');
+        });
+      } finally {
+        await session.endSession();
+      }
+    } else {
+      // Fallback sans transaction (environnement dev / Mongo standalone)
+      await this.reservationModel.create({
+        slotId: new Types.ObjectId(data.slotId),
+        organizerEmail: data.organizerEmail,
+        tokenHash,
+        acceptedCount: 0,
       });
-    } finally {
-      await session.endSession();
+      await this.slotsService.setStatus(data.slotId, 'RESERVED');
     }
 
     const publicUrl = process.env.PUBLIC_APP_URL || 'http://localhost:3000';
