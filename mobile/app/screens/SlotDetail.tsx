@@ -1,10 +1,12 @@
 import React from 'react';
 import { View, Text, Button, Alert } from 'react-native';
+import { BASE_URL } from '../config';
 
 export default function SlotDetail() {
+  // Id du créneau à réserver: à injecter via navigation/paramètres selon votre flux
   const slotId = '';
   const reserve = async () => {
-    const r = await fetch('http://localhost:3000/reservations', {
+    const r = await fetch(`${BASE_URL}/reservations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ slotId }),

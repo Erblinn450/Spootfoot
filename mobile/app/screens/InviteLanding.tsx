@@ -1,16 +1,26 @@
 import React from 'react';
 import { View, Text, Button, Alert } from 'react-native';
+import { BASE_URL } from '../config';
 
 type InviteInfo = { slot: { startAt: string; capacity: number; status: string }, restants: number };
 
 export default function InviteLanding() {
+  // Token de l'invitation: à injecter via navigation/paramètres selon votre flux
   const token = '';
   const [info, setInfo] = React.useState<InviteInfo | null>(null);
+
+  // Chargement des informations d'invitation (slot + places restantes)
   React.useEffect(() => {
-    fetch(`http://localhost:3000/invitations/${token}`).then(r => r.json()).then(setInfo).catch(() => setInfo(null));
+    if (!token) return;
+    fetch(`${BASE_URL}/invitations/${token}`)
+      .then((r) => r.json())
+      .then(setInfo)
+      .catch(() => setInfo(null));
   }, [token]);
+
+  // Acceptation de l'invitation
   const accept = async () => {
-    const r = await fetch(`http://localhost:3000/invitations/${token}/accept`, { method: 'POST' });
+    const r = await fetch(`${BASE_URL}/invitations/${token}/accept`, { method: 'POST' });
     if (r.status === 200) {
       const data = await r.json();
       Alert.alert('Merci', `acceptedCount=${data.acceptedCount}`);

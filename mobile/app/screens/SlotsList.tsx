@@ -1,12 +1,14 @@
 import React from 'react';
 import { View, Text, FlatList, TouchableOpacity } from 'react-native';
+import { BASE_URL } from '../config';
 
 type Slot = { _id: string; startAt: string; status: 'OPEN' | 'RESERVED' | 'FULL' };
 
 export default function SlotsList() {
   const [slots, setSlots] = React.useState<Slot[]>([]);
+  // Chargement de la liste des créneaux
   React.useEffect(() => {
-    fetch('http://localhost:3000/slots').then(r => r.json()).then(setSlots).catch(() => setSlots([]));
+    fetch(`${BASE_URL}/slots`).then((r) => r.json()).then(setSlots).catch(() => setSlots([]));
   }, []);
   return (
     <View style={{ flex: 1, padding: 16 }}>
