@@ -17,8 +17,14 @@ export class SlotsService {
     return new this.slotModel({ terrainId: data.terrainId, startAt: start, durationMin: duration, capacity, status: 'OPEN' }).save();
   }
 
-  async listPublic() {
-    return this.slotModel.find({ status: { $in: ['OPEN', 'RESERVED', 'FULL'] } }).sort({ startAt: 1 }).lean();
+  async listPublic(filter?: { terrainId?: string; from?: Date; limit?: number }) {
+    const query: any = { status: { $in: ['OPEN', 'RESERVED', 'FULL'] } };
+    if (filter?.terrainId) query.terrainId = filter.terrainId;
+    if (filter?.from) query.startAt = { $gte: filter.from };
+
+    let q = this.slotModel.find(query).sort({ startAt: 1 }).lean();
+    if (filter?.limit && filter.limit > 0) q = q.limit(filter.limit);
+    return q;
   }
 
   async setStatus(slotId: string, status: 'OPEN' | 'RESERVED' | 'FULL' | 'CANCELLED') {
