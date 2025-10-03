@@ -1,0 +1,22 @@
+services:
+  api:
+    build:
+      context: ./backend
+      target: dev
+    container_name: spotfoot-api
+    env_file:
+      - ./backend/.env
+    environment:
+      # Valeurs par défaut si non présentes dans backend/.env
+      - PORT=3001
+      - MONGODB_URI=mongodb://root:rootpass@mongo:27017/spotfoot?authSource=admin
+      - JWT_SECRET=${JWT_SECRET:-dev-secret}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      mongo:
+        condition: service_healthy
+    command: npm run start:dev

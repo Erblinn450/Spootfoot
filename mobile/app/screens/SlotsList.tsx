@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, FlatList, TouchableOpacity, Animated, RefreshControl, ActivityIndicator } from 'react-native';
 import { BASE_URL } from '../config';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
 import { colors, spacing, radius } from '../theme';
@@ -86,6 +86,13 @@ export default function SlotsList() {
   React.useEffect(() => {
     load();
   }, [load]);
+
+  // Recharger la liste quand l'écran reprend le focus (ex: retour depuis Détail/Invitation)
+  useFocusEffect(
+    React.useCallback(() => {
+      load();
+    }, [load])
+  );
   return (
     <View style={{ flex: 1, padding: spacing.lg, backgroundColor: colors.background }}>
       {/* En-tête avec actions */}

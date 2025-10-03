@@ -3,11 +3,15 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as dotenv from 'dotenv';
 import 'reflect-metadata';
 import { AppModule } from './app.module';
+import helmet from 'helmet';
+import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   dotenv.config({ path: process.env.DOTENV_PATH || undefined });
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('');
+  app.use(helmet());
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
 
   // Autoriser les appels depuis le front (Web/Expo)
   app.enableCors({
@@ -36,6 +40,6 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api-docs', app, document, { useGlobalPrefix: true });
 
-  await app.listen(process.env.PORT ? Number(process.env.PORT) : 3000);
+  await app.listen(process.env.PORT ? Number(process.env.PORT) : 3001);
 }
 void bootstrap();

@@ -8,12 +8,19 @@ import { colors, spacing, radius } from '../theme';
 import PrimaryButton from '../components/PrimaryButton';
 import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useUser } from '../state/UserContext';
 
 export default function SlotDetail() {
   // Récupération des paramètres de route
   const route = useRoute<RouteProp<RootStackParamList, 'SlotDetail'>>();
   const slotId = route.params?.slotId;
-  const [email, setEmail] = React.useState('organizer@example.com');
+  const { user } = useUser();
+  const [email, setEmail] = React.useState(user.email ?? 'organizer@example.com');
+
+  // Si l'email utilisateur arrive après (chargement AsyncStorage), synchroniser le champ
+  React.useEffect(() => {
+    if (user.email) setEmail(user.email);
+  }, [user.email]);
   const navigation = useNavigation<any>();
 
   // Réservation du créneau avec email organisateur
@@ -31,19 +38,31 @@ export default function SlotDetail() {
           // Extraire le token à partir de l'URL renvoyée par l'API
           const m = String(data.inviteUrl).match(/invitations\/(.+)$/) || String(data.inviteUrl).match(/invite\/(.+)$/);
           const token = m?.[1];
+          // Sauvegarder la réservation localement pour l'onglet Réservations (MVP), même si le token est introuvable
+          try {
+            await AsyncStorage.setItem(
+              'last_reservation',
+              JSON.stringify({ slotId, inviteUrl: data.inviteUrl, token, createdAt: Date.now() })
+            );
+          } catch {}
+          // Navigation préférée: vers Invitation avec autoAccept si token
           if (token) {
-            // Sauvegarder la réservation localement pour l'onglet Réservations (MVP)
-            try {
-              await AsyncStorage.setItem(
-                'last_reservation',
-                JSON.stringify({ slotId, inviteUrl: data.inviteUrl, token, createdAt: Date.now() })
-              );
-            } catch {}
-            // Navigation vers l'écran Invitation avec autoAccept pour s'enregistrer en tant que joueur
-            navigation.navigate('InviteLanding', { token, autoAccept: true });
+            navigation.navigate('InviteLanding', { token, inviteUrl: data.inviteUrl, autoAccept: true });
           } else {
-            Alert.alert('Lien', data.inviteUrl);
+            // Sinon, fallback direct vers l'onglet Réservations
+            Alert.alert('Réservation créée', 'Le lien d\'invitation a été généré.');
+            try { navigation.getParent()?.navigate('Réservations'); } catch {}
           }
+        } else {
+          // Si l'API n'a pas renvoyé d'URL, on enregistre un minimum pour l'écran Réservations
+          try {
+            await AsyncStorage.setItem(
+              'last_reservation',
+              JSON.stringify({ slotId, inviteUrl: null, token: null, createdAt: Date.now() })
+            );
+          } catch {}
+          Alert.alert('Réservation créée', "Lien d'invitation non renvoyé par l'API");
+          try { navigation.getParent()?.navigate('Réservations'); } catch {}
         }
       } else {
         const msg = await r.text();

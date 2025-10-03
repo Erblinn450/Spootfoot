@@ -20,7 +20,7 @@ ENV NODE_ENV=production
 COPY --from=build /app/package*.json ./
 RUN npm ci --omit=dev || npm install --omit=dev
 COPY --from=build /app/dist ./dist
-EXPOSE 3000
+EXPOSE 3001
 CMD ["node", "dist/main.js"]
 
 # --- Development target (hot reload) ---
@@ -29,5 +29,5 @@ WORKDIR /app
 COPY tsconfig*.json ./
 COPY nest-cli.json ./
 COPY src ./src
-EXPOSE 3000
+EXPOSE 3001
 CMD ["npm", "run", "start:dev"]

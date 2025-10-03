@@ -34,4 +34,13 @@ export class SlotsService {
   async getById(id: string) {
     return this.slotModel.findById(id);
   }
+
+  // ADMIN ONLY
+  async deleteById(id: string) {
+    return this.slotModel.findByIdAndDelete(id);
+  }
+
+  async deleteAll() {
+    return this.slotModel.deleteMany({});
+  }
 }

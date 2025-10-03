@@ -6,12 +6,15 @@ import { useUser } from '../state/UserContext';
 import { useNavigation } from '@react-navigation/native';
 
 export default function Profile() {
-  const { user, setEmail } = useUser();
+  const { user, logout: doLogout } = useUser();
   const navigation = useNavigation<any>();
 
-  const logout = () => {
-    setEmail(null);
-    navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+  const handleLogout = () => {
+    // Réinitialise complètement la session (email, roles, accessToken, caches)
+    void (async () => {
+      await doLogout();
+      navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+    })();
   };
 
   return (
@@ -33,7 +36,7 @@ export default function Profile() {
         <Text style={{ color: colors.text, fontWeight: '600' }}>{user.email ?? 'non renseigné'}</Text>
       </View>
 
-      <PrimaryButton title="Déconnexion" onPress={logout} />
+      <PrimaryButton title="Déconnexion" onPress={handleLogout} />
     </View>
   );
 }
