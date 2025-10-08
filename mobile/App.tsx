@@ -13,6 +13,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Login from './app/screens/Login';
 import Profile from './app/screens/Profile';
 import { UserProvider } from './app/state/UserContext';
+import CalendarAdmin from './app/screens/CalendarAdmin';
+import { useUser } from './app/state/UserContext';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const RootStack = createNativeStackNavigator();
@@ -28,7 +30,7 @@ function TerrainsStack() {
         headerTitleStyle: { color: colors.text },
       }}
     >
-      <Stack.Screen name="SlotsList" component={SlotsList} options={{ title: 'Créneaux' }} />
+      <Stack.Screen name="SlotsList" component={SlotsList} options={{ headerShown: false }} />
       <Stack.Screen name="SlotDetail" component={SlotDetail} options={{ title: 'Détail' }} />
       <Stack.Screen name="InviteLanding" component={InviteLanding} options={{ title: 'Invitation' }} />
     </Stack.Navigator>
@@ -36,6 +38,7 @@ function TerrainsStack() {
 }
 
 function MainTabs() {
+  const { isAdmin } = useUser();
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -49,7 +52,9 @@ function MainTabs() {
               ? (focused ? 'football' : 'football-outline')
               : route.name === 'Réservations'
               ? (focused ? 'calendar' : 'calendar-outline')
-              : (focused ? 'person' : 'person-outline');
+              : route.name === 'Profil'
+              ? (focused ? 'person' : 'person-outline')
+              : (focused ? 'settings' : 'settings-outline');
           return <Ionicons name={name as any} size={size} color={color} />;
         },
       })}
@@ -57,6 +62,7 @@ function MainTabs() {
       <Tab.Screen name="Terrains" component={TerrainsStack} />
       <Tab.Screen name="Réservations" component={Reservations} />
       <Tab.Screen name="Profil" component={Profile} />
+      {isAdmin && <Tab.Screen name="Admin" component={CalendarAdmin} />}
     </Tab.Navigator>
   );
 }

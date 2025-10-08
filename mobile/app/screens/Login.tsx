@@ -1,10 +1,11 @@
 import React from 'react';
-import { View, Text, TextInput, Alert } from 'react-native';
-import { colors, spacing, radius } from '../theme';
+import { View, Text, TextInput, Alert, TouchableOpacity } from 'react-native';
+import { colors, spacing, radius, shadows } from '../theme';
 import PrimaryButton from '../components/PrimaryButton';
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '../state/UserContext';
 import { BASE_URL } from '../config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function Login() {
   const navigation = useNavigation<any>();
@@ -33,7 +34,7 @@ export default function Login() {
       const text = await r.text();
       if (!r.ok) throw new Error(text || 'Erreur');
       const data = JSON.parse(text);
-      await setAuth({ email: data.user.email, roles: data.user.roles || [], accessToken: data.accessToken });
+      await setAuth({ email: data.user.email, roles: data.user.roles || [], accessToken: data.accessToken }, password);
       navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
     } catch (e: any) {
       setError(e?.message ?? 'Erreur réseau');
@@ -51,65 +52,165 @@ export default function Login() {
   }, [user.accessToken, navigation]);
 
   return (
-    <View style={{ flex: 1, padding: spacing.lg, backgroundColor: colors.background, justifyContent: 'center' }}>
-      <View style={{ alignItems: 'center', marginBottom: spacing.xl }}>
-        <Text style={{ fontSize: 28, fontWeight: '700', color: colors.text }}>SpotFoot</Text>
-        <Text style={{ marginTop: spacing.xs, color: colors.textMuted }}>Espace utilisateur et admin</Text>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Header avec fond vert */}
+      <View style={{ 
+        backgroundColor: colors.primary, 
+        paddingTop: spacing.xxl * 2,
+        paddingBottom: spacing.xxl,
+        paddingHorizontal: spacing.xl,
+        borderBottomLeftRadius: radius.xl * 2,
+        borderBottomRightRadius: radius.xl * 2,
+        ...shadows.xl,
+      }}>
+        <Text style={{ fontSize: 36, fontWeight: '800', color: 'white', textAlign: 'center', marginBottom: spacing.xs }}>
+          ⚽ SpotFoot
+        </Text>
+        <Text style={{ fontSize: 16, color: 'rgba(255,255,255,0.9)', textAlign: 'center' }}>
+          Réservez vos terrains facilement
+        </Text>
       </View>
 
-      <Text style={{ marginBottom: spacing.xs, color: colors.text }}>Email</Text>
-      <TextInput
-        value={email}
-        onChangeText={(t) => {
-          setEmail(t);
-          if (error) setError(null);
-        }}
-        autoCapitalize="none"
-        keyboardType="email-address"
-        placeholder="vous@exemple.com"
-        style={{
-          borderWidth: 1,
-          borderRadius: radius.md,
-          padding: spacing.md,
-          marginBottom: spacing.lg,
-          borderColor: error ? colors.danger : colors.border,
-          backgroundColor: colors.card,
-        }}
-        returnKeyType="next"
-      />
+      {/* Formulaire dans une carte */}
+      <View style={{ 
+        marginHorizontal: spacing.xl, 
+        marginTop: -spacing.xxl,
+        backgroundColor: colors.card,
+        borderRadius: radius.xl,
+        padding: spacing.xl,
+        ...shadows.lg,
+      }}>
+        <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: spacing.lg, textAlign: 'center' }}>
+          Connexion
+        </Text>
 
-      <Text style={{ marginBottom: spacing.xs, color: colors.text }}>Mot de passe</Text>
-      <TextInput
-        value={password}
-        onChangeText={(t) => {
-          setPassword(t);
-          if (error) setError(null);
-        }}
-        secureTextEntry
-        placeholder="••••••"
-        style={{
-          borderWidth: 1,
-          borderRadius: radius.md,
-          padding: spacing.md,
-          marginBottom: spacing.lg,
-          borderColor: error ? colors.danger : colors.border,
-          backgroundColor: colors.card,
-        }}
-        returnKeyType="done"
-        onSubmitEditing={() => onAuth('login')}
-      />
+        <Text style={{ marginBottom: spacing.xs, color: colors.text, fontWeight: '600', fontSize: 14 }}>Email</Text>
+        <TextInput
+          value={email}
+          onChangeText={(t) => {
+            setEmail(t);
+            if (error) setError(null);
+          }}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          placeholder="vous@exemple.com"
+          style={{
+            borderWidth: 2,
+            borderRadius: radius.lg,
+            padding: spacing.md,
+            marginBottom: spacing.lg,
+            borderColor: error ? colors.danger : colors.border,
+            backgroundColor: colors.background,
+            fontSize: 15,
+          }}
+          returnKeyType="next"
+        />
 
-      {error && <Text style={{ color: colors.danger, marginTop: -spacing.lg, marginBottom: spacing.lg }}>{error}</Text>}
+        <Text style={{ marginBottom: spacing.xs, color: colors.text, fontWeight: '600', fontSize: 14 }}>Mot de passe</Text>
+        <TextInput
+          value={password}
+          onChangeText={(t) => {
+            setPassword(t);
+            if (error) setError(null);
+          }}
+          secureTextEntry
+          placeholder="••••••"
+          style={{
+            borderWidth: 2,
+            borderRadius: radius.lg,
+            padding: spacing.md,
+            marginBottom: spacing.lg,
+            borderColor: error ? colors.danger : colors.border,
+            backgroundColor: colors.background,
+            fontSize: 15,
+          }}
+          returnKeyType="done"
+          onSubmitEditing={() => onAuth('login')}
+        />
 
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <PrimaryButton title={loading ? '...' : "S'inscrire"} onPress={() => onAuth('signup')} disabled={!isValidForm || loading} />
-        <View style={{ width: spacing.md }} />
-        <PrimaryButton title={loading ? '...' : 'Se connecter'} onPress={() => onAuth('login')} disabled={!isValidForm || loading} />
+        {error && (
+          <View style={{ 
+            backgroundColor: '#FEE2E2', 
+            padding: spacing.md, 
+            borderRadius: radius.md, 
+            marginBottom: spacing.lg,
+            borderLeftWidth: 4,
+            borderLeftColor: colors.danger,
+          }}>
+            <Text style={{ color: colors.danger, fontWeight: '600' }}>❌ {error}</Text>
+          </View>
+        )}
+
+        <View style={{ flexDirection: 'row', gap: spacing.md }}>
+          <TouchableOpacity
+            style={{
+              flex: 1,
+              backgroundColor: colors.backgroundDark,
+              padding: spacing.md,
+              borderRadius: radius.lg,
+              alignItems: 'center',
+              opacity: !isValidForm || loading ? 0.5 : 1,
+            }}
+            onPress={() => onAuth('signup')}
+            disabled={!isValidForm || loading}
+          >
+            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>
+              {loading ? '⏳' : "S'inscrire"}
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={{
+              flex: 1,
+              backgroundColor: colors.primary,
+              padding: spacing.md,
+              borderRadius: radius.lg,
+              alignItems: 'center',
+              ...shadows.md,
+              opacity: !isValidForm || loading ? 0.5 : 1,
+            }}
+            onPress={() => onAuth('login')}
+            disabled={!isValidForm || loading}
+          >
+            <Text style={{ color: 'white', fontWeight: '700', fontSize: 15 }}>
+              {loading ? '⏳' : 'Se connecter'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={{ color: colors.textMuted, marginTop: spacing.lg, fontSize: 12, textAlign: 'center', lineHeight: 18 }}>
+          💡 Astuce : utilisez admin@example.com pour accéder à l'interface admin
+        </Text>
       </View>
 
-      <Text style={{ color: colors.textMuted, marginTop: spacing.md, fontSize: 12 }}>
-        Remarque: si votre email correspond à ADMIN_EMAIL côté serveur, vous obtenez le rôle admin.
-      </Text>
+      {/* Debug button */}
+      <TouchableOpacity
+        style={{
+          marginHorizontal: spacing.xl,
+          marginTop: spacing.xl,
+          padding: spacing.md,
+          backgroundColor: colors.card,
+          borderRadius: radius.lg,
+          alignItems: 'center',
+          borderWidth: 1,
+          borderColor: colors.border,
+          ...shadows.sm,
+        }}
+        onPress={async () => {
+          try {
+            await AsyncStorage.clear();
+            window.alert('✅ Cache vidé ! Vous pouvez vous reconnecter.');
+            setEmail('admin@example.com');
+            setPassword('secret123');
+          } catch (e) {
+            window.alert('❌ Impossible de vider le cache');
+          }
+        }}
+      >
+        <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '600' }}>
+          🔧 Vider le cache (Debug)
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 }

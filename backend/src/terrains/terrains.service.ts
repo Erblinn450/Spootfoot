@@ -11,4 +11,8 @@ export class TerrainsService {
     const doc = new this.terrainModel({ name: data.name, address: data.address });
     return doc.save();
   }
+
+  async listAll() {
+    return this.terrainModel.find({}).sort({ name: 1 }).lean().exec();
+  }
 }

@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, Alert, TextInput } from 'react-native';
+import { View, Text, Alert, TextInput, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { BASE_URL } from '../config';
-import { colors, spacing, radius } from '../theme';
+import { colors, spacing, radius, shadows } from '../theme';
 import PrimaryButton from '../components/PrimaryButton';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
@@ -9,7 +9,15 @@ import type { RootStackParamList } from '../navigation/types';
 import { useUser } from '../state/UserContext';
 import * as Clipboard from 'expo-clipboard';
 
-type InviteInfo = { slot: { startAt: string; capacity: number; status: string }, restants: number };
+type InviteInfo = { 
+  slot: { 
+    startAt: string; 
+    durationMin: number;
+    capacity: number; 
+    status: string 
+  }, 
+  restants: number 
+};
 
 export default function InviteLanding() {
   const route = useRoute<RouteProp<RootStackParamList, 'InviteLanding'>>();
@@ -108,71 +116,230 @@ export default function InviteLanding() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoAccept, info, loading]);
 
+  const dateObj = info ? new Date(info.slot.startAt) : null;
+  const dateStr = dateObj?.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const timeStr = dateObj?.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
+  const acceptedCount = info ? (info.slot.capacity - info.restants) : 0;
+
   return (
-    <View style={{ flex: 1, padding: spacing.lg, backgroundColor: colors.background }}>
-      <Text style={{ fontSize: 20, fontWeight: '600', color: colors.text, marginBottom: spacing.md }}>Invitation</Text>
-
-      {/* Champ token + bouton Consulter */}
-      <View style={{ flexDirection: 'row', marginBottom: spacing.md }}>
-        <TextInput
-          value={token}
-          onChangeText={(t) => setToken(sanitizeToken(t))}
-          placeholder="Collez l'URL complète ou le token"
-          autoCapitalize="none"
-          style={{
-            flex: 1,
-            borderWidth: 1,
-            borderRadius: radius.md,
-            padding: spacing.md,
-            marginRight: spacing.sm,
-            borderColor: colors.border,
-            backgroundColor: colors.card,
-          }}
-        />
-        <PrimaryButton title={loading ? '...' : 'Consulter'} onPress={load} disabled={!token || loading} />
+    <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Header */}
+      <View style={{ 
+        backgroundColor: colors.secondary, 
+        paddingTop: spacing.xl,
+        paddingBottom: spacing.xl,
+        paddingHorizontal: spacing.xl,
+        borderBottomLeftRadius: radius.xl,
+        borderBottomRightRadius: radius.xl,
+        ...shadows.lg,
+      }}>
+        <Text style={{ fontSize: 28, fontWeight: '800', color: 'white', marginBottom: spacing.xs }}>
+          👥 Invitation
+        </Text>
+        <Text style={{ fontSize: 15, color: 'rgba(255,255,255,0.9)' }}>
+          Rejoignez le match !
+        </Text>
       </View>
-      <Text style={{ color: colors.textMuted, marginTop: -spacing.sm, marginBottom: spacing.md, fontSize: 12 }}>
-        Exemple: http://localhost:3001/invitations/ABCDEF ou collez directement le token ABCDEF
-      </Text>
 
-      {error && <Text style={{ color: colors.danger, marginBottom: spacing.sm }}>Erreur: {error}</Text>}
-      {message && <Text style={{ color: colors.textMuted, marginBottom: spacing.sm }}>{message}</Text>}
-
-      {/* Carte détails de l'invitation */}
-      {info && (
-        <View
-          style={{
-            backgroundColor: colors.card,
-            borderRadius: radius.md,
-            borderWidth: 1,
-            borderColor: colors.border,
-            padding: spacing.lg,
-            shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
-          }}
-        >
-          <Text style={{ fontWeight: '700', color: colors.text, marginBottom: spacing.xs }}>Créneau invité</Text>
-          <Text style={{ color: colors.textMuted, marginBottom: spacing.sm }}>
-            {new Date(info.slot.startAt).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' })}{' '}
-            {new Date(info.slot.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Text>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={{ color: colors.textMuted }}>Restants: {info.restants}</Text>
-            <PrimaryButton title="Je viens" onPress={accept} />
-          </View>
-          {(paramInviteUrl || token) && (
-            <View style={{ marginTop: spacing.md }}>
-              <Text style={{ color: colors.textMuted, marginBottom: spacing.xs }}>Lien d'invitation</Text>
-              <Text style={{ color: colors.text, marginBottom: spacing.sm }}>
-                {paramInviteUrl || `${BASE_URL}/invitations/${token}`}
+      <View style={{ padding: spacing.xl }}>
+        {/* Formulaire token */}
+        {!info && (
+          <View
+            style={{
+              backgroundColor: colors.card,
+              borderRadius: radius.xl,
+              padding: spacing.xl,
+              marginBottom: spacing.lg,
+              ...shadows.md,
+            }}
+          >
+            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: spacing.md }}>
+              🔗 Entrez votre lien
+            </Text>
+            <Text style={{ color: colors.textMuted, fontSize: 14, marginBottom: spacing.md, lineHeight: 20 }}>
+              Collez le lien d'invitation que vous avez reçu
+            </Text>
+            <TextInput
+              value={token}
+              onChangeText={(t) => setToken(sanitizeToken(t))}
+              placeholder="http://localhost:3001/invitations/..."
+              autoCapitalize="none"
+              style={{
+                borderWidth: 2,
+                borderRadius: radius.lg,
+                padding: spacing.md,
+                marginBottom: spacing.md,
+                borderColor: colors.border,
+                backgroundColor: colors.background,
+                fontSize: 14,
+              }}
+            />
+            <TouchableOpacity
+              style={{
+                backgroundColor: loading ? colors.textMuted : colors.secondary,
+                padding: spacing.md,
+                borderRadius: radius.lg,
+                alignItems: 'center',
+                ...shadows.sm,
+              }}
+              onPress={load}
+              disabled={!token || loading}
+            >
+              <Text style={{ color: 'white', fontWeight: '700', fontSize: 15 }}>
+                {loading ? '⏳ Chargement...' : '🔍 Consulter'}
               </Text>
-              <PrimaryButton
-                title="Copier le lien"
-                onPress={() => Clipboard.setStringAsync(paramInviteUrl || `${BASE_URL}/invitations/${token}`)}
-              />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {error && (
+          <View style={{ 
+            backgroundColor: '#FEE2E2', 
+            padding: spacing.md, 
+            borderRadius: radius.lg, 
+            marginBottom: spacing.md,
+            borderLeftWidth: 4,
+            borderLeftColor: colors.danger,
+            ...shadows.sm,
+          }}>
+            <Text style={{ color: colors.danger, fontWeight: '600' }}>❌ {error}</Text>
+          </View>
+        )}
+
+        {message && (
+          <View style={{ 
+            backgroundColor: colors.primarySoft, 
+            padding: spacing.md, 
+            borderRadius: radius.lg, 
+            marginBottom: spacing.md,
+            borderLeftWidth: 4,
+            borderLeftColor: colors.success,
+            ...shadows.sm,
+          }}>
+            <Text style={{ color: colors.success, fontWeight: '600' }}>✅ {message}</Text>
+          </View>
+        )}
+
+        {/* Carte détails du créneau */}
+        {info && (
+          <>
+            <View
+              style={{
+                backgroundColor: colors.card,
+                borderRadius: radius.xl,
+                padding: spacing.xl,
+                marginBottom: spacing.lg,
+                borderLeftWidth: 4,
+                borderLeftColor: colors.secondary,
+                ...shadows.md,
+              }}
+            >
+              <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: spacing.lg }}>
+                ⚽ Détails du match
+              </Text>
+
+              <View style={{ marginBottom: spacing.md }}>
+                <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600', marginBottom: spacing.xs }}>
+                  Date
+                </Text>
+                <Text style={{ color: colors.text, fontWeight: '600', fontSize: 16 }}>
+                  {dateStr}
+                </Text>
+              </View>
+
+              <View style={{ marginBottom: spacing.md }}>
+                <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600', marginBottom: spacing.xs }}>
+                  Heure
+                </Text>
+                <Text style={{ color: colors.text, fontWeight: '700', fontSize: 20 }}>
+                  🕐 {timeStr}
+                </Text>
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg }}>
+                <View style={{ flex: 1, backgroundColor: colors.primarySoft, padding: spacing.md, borderRadius: radius.md }}>
+                  <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', marginBottom: spacing.xs }}>
+                    Durée
+                  </Text>
+                  <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 15 }}>
+                    {info.slot.durationMin} min
+                  </Text>
+                </View>
+                <View style={{ flex: 1, backgroundColor: '#DBEAFE', padding: spacing.md, borderRadius: radius.md }}>
+                  <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', marginBottom: spacing.xs }}>
+                    Inscrits
+                  </Text>
+                  <Text style={{ color: colors.secondary, fontWeight: '700', fontSize: 15 }}>
+                    {acceptedCount}/{info.slot.capacity}
+                  </Text>
+                </View>
+                <View style={{ flex: 1, backgroundColor: info.restants > 0 ? colors.primarySoft : '#FEE2E2', padding: spacing.md, borderRadius: radius.md }}>
+                  <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', marginBottom: spacing.xs }}>
+                    Places
+                  </Text>
+                  <Text style={{ color: info.restants > 0 ? colors.success : colors.danger, fontWeight: '700', fontSize: 15 }}>
+                    {info.restants > 0 ? `${info.restants} libres` : 'Complet'}
+                  </Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={{
+                  backgroundColor: info.restants > 0 ? colors.success : colors.textMuted,
+                  padding: spacing.lg,
+                  borderRadius: radius.lg,
+                  alignItems: 'center',
+                  ...shadows.md,
+                }}
+                onPress={accept}
+                disabled={info.restants === 0}
+              >
+                <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>
+                  {info.restants > 0 ? '✅ Je viens !' : '❌ Complet'}
+                </Text>
+              </TouchableOpacity>
             </View>
-          )}
-        </View>
-      )}
-    </View>
+
+            {/* Partage du lien */}
+            {(paramInviteUrl || token) && (
+              <View
+                style={{
+                  backgroundColor: colors.card,
+                  borderRadius: radius.xl,
+                  padding: spacing.xl,
+                  ...shadows.md,
+                }}
+              >
+                <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: spacing.md }}>
+                  🔗 Partager l'invitation
+                </Text>
+                <View style={{ 
+                  backgroundColor: colors.backgroundDark, 
+                  padding: spacing.md, 
+                  borderRadius: radius.md,
+                  marginBottom: spacing.md,
+                }}>
+                  <Text style={{ color: colors.text, fontSize: 12, fontFamily: 'monospace' }} numberOfLines={2}>
+                    {paramInviteUrl || `${BASE_URL}/invitations/${token}`}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: colors.secondary,
+                    padding: spacing.md,
+                    borderRadius: radius.lg,
+                    alignItems: 'center',
+                    ...shadows.sm,
+                  }}
+                  onPress={() => Clipboard.setStringAsync(paramInviteUrl || `${BASE_URL}/invitations/${token}`)}
+                >
+                  <Text style={{ color: 'white', fontWeight: '700', fontSize: 14 }}>📋 Copier le lien</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </>
+        )}
+      </View>
+    </ScrollView>
   );
 }

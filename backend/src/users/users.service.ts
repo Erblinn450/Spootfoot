@@ -48,4 +48,13 @@ export class UsersService {
       { new: true }
     ).lean<User>().exec();
   }
+
+  async updatePasswordByEmail(email: string, password: string) {
+    const passwordHash = await bcrypt.hash(password, 10);
+    return this.userModel.findOneAndUpdate(
+      { email },
+      { $set: { passwordHash } },
+      { new: true }
+    ).lean<User>().exec();
+  }
 }

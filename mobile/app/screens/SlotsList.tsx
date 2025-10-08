@@ -4,7 +4,7 @@ import { BASE_URL } from '../config';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
-import { colors, spacing, radius } from '../theme';
+import { colors, spacing, radius, shadows } from '../theme';
 import PrimaryButton from '../components/PrimaryButton';
 
 type Slot = { _id: string; startAt: string; status: 'OPEN' | 'RESERVED' | 'FULL' };
@@ -32,28 +32,26 @@ function SlotCard({ item, index, onPress }: { item: Slot; index: number; onPress
       <TouchableOpacity
         onPress={onPress}
         style={{
-          padding: spacing.md,
+          padding: spacing.lg,
           backgroundColor: colors.card,
-          borderRadius: radius.md,
-          borderWidth: 1,
-          borderColor: colors.border,
+          borderRadius: radius.lg,
           marginBottom: spacing.md,
-          shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
+          borderLeftWidth: 4,
+          borderLeftColor: badgeColor,
+          ...shadows.md,
         }}
       >
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <View>
-            <Text style={{ fontSize: 16, fontWeight: '600', color: colors.text }}>
-              {timeStr}
-            </Text>
-            <Text style={{ fontSize: 12, color: colors.textMuted }}>
-              {dateStr}
-            </Text>
-          </View>
-          <View style={{ backgroundColor: badgeColor, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.pill }}>
-            <Text style={{ color: 'white', fontSize: 12 }}>{badgeText}</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs }}>
+          <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>
+            🕐 {timeStr}
+          </Text>
+          <View style={{ backgroundColor: badgeColor, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill, ...shadows.sm }}>
+            <Text style={{ color: 'white', fontSize: 13, fontWeight: '700' }}>{badgeText}</Text>
           </View>
         </View>
+        <Text style={{ fontSize: 14, color: colors.textMuted, fontWeight: '600' }}>
+          📅 {dateStr}
+        </Text>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -94,45 +92,121 @@ export default function SlotsList() {
     }, [load])
   );
   return (
-    <View style={{ flex: 1, padding: spacing.lg, backgroundColor: colors.background }}>
-      {/* En-tête avec actions */}
-      <View style={{ marginBottom: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Text style={{ fontSize: 20, fontWeight: '600', color: colors.text }}>Créneaux</Text>
-        <View style={{ flexDirection: 'row' }}>
-          <PrimaryButton
-            title={loading ? 'Chargement...' : 'Rafraîchir'}
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Header moderne */}
+      <View style={{ 
+        backgroundColor: colors.primary, 
+        paddingTop: spacing.xl,
+        paddingBottom: spacing.lg,
+        paddingHorizontal: spacing.xl,
+        borderBottomLeftRadius: radius.xl,
+        borderBottomRightRadius: radius.xl,
+        ...shadows.lg,
+      }}>
+        <Text style={{ fontSize: 32, fontWeight: '800', color: 'white', marginBottom: spacing.xs }}>
+          ⚽ SpotFoot
+        </Text>
+        <Text style={{ fontSize: 16, fontWeight: '600', color: 'rgba(255,255,255,0.9)', marginBottom: spacing.sm }}>
+          Terrains disponibles
+        </Text>
+        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+          <TouchableOpacity
+            style={{
+              flex: 1,
+              backgroundColor: 'white',
+              padding: spacing.md,
+              borderRadius: radius.lg,
+              alignItems: 'center',
+              ...shadows.md,
+              opacity: loading ? 0.5 : 1,
+            }}
             onPress={load}
             disabled={loading}
-            style={{ marginRight: spacing.sm }}
-          />
-          <PrimaryButton title="Invitation" onPress={() => navigation.navigate('InviteLanding')} />
+          >
+            <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>
+              {loading ? '⏳ Chargement...' : '🔄 Rafraîchir'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{
+              backgroundColor: 'white',
+              padding: spacing.md,
+              borderRadius: radius.lg,
+              alignItems: 'center',
+              minWidth: 100,
+              ...shadows.md,
+            }}
+            onPress={() => navigation.navigate('InviteLanding')}
+          >
+            <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>👥 Inviter</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
-      {error && (
-        <Text style={{ color: colors.danger, marginBottom: spacing.sm }}>Erreur: {error}</Text>
-      )}
-      {!loading && !error && slots.length === 0 && (
-        <Text style={{ color: colors.textMuted, marginBottom: spacing.sm }}>Aucun créneau disponible.</Text>
-      )}
-      {loading && (
-        <View style={{ marginBottom: spacing.md }}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
-      )}
-      <FlatList
-        data={slots}
-        keyExtractor={(s) => s._id}
-        contentContainerStyle={{ paddingBottom: spacing.lg }}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.primary} />}
-        renderItem={({ item, index }) => (
-          <SlotCard
-            item={item}
-            index={index}
-            onPress={() => navigation.navigate('SlotDetail', { slotId: item._id })}
-          />
+      <View style={{ flex: 1, padding: spacing.lg }}>
+
+        {error && (
+          <View style={{ 
+            backgroundColor: '#FEE2E2', 
+            padding: spacing.md, 
+            borderRadius: radius.lg, 
+            marginBottom: spacing.md,
+            borderLeftWidth: 4,
+            borderLeftColor: colors.danger,
+            ...shadows.sm,
+          }}>
+            <Text style={{ color: colors.danger, fontWeight: '600' }}>❌ Erreur: {error}</Text>
+          </View>
         )}
-      />
+        {!loading && !error && slots.length === 0 && (
+          <View style={{
+            padding: spacing.xxl,
+            backgroundColor: colors.card,
+            borderRadius: radius.lg,
+            alignItems: 'center',
+            ...shadows.sm,
+          }}>
+            <Text style={{ fontSize: 48, marginBottom: spacing.md }}>💭</Text>
+            <Text style={{ color: colors.text, fontWeight: '600', fontSize: 16, marginBottom: spacing.xs }}>
+              Aucun créneau
+            </Text>
+            <Text style={{ color: colors.textMuted, textAlign: 'center' }}>
+              Aucun terrain disponible pour le moment
+            </Text>
+          </View>
+        )}
+        {loading && (
+          <View style={{ marginTop: spacing.xl, alignItems: 'center' }}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={{ color: colors.textMuted, marginTop: spacing.md }}>Chargement des créneaux...</Text>
+          </View>
+        )}
+        {!loading && slots.length > 0 && (
+          <View style={{ 
+            marginBottom: spacing.md,
+            paddingBottom: spacing.sm,
+            borderBottomWidth: 2,
+            borderBottomColor: colors.primary,
+          }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>
+              🏟️ {slots.length} créneau{slots.length > 1 ? 'x' : ''} disponible{slots.length > 1 ? 's' : ''}
+            </Text>
+          </View>
+        )}
+        <FlatList
+          data={slots}
+          keyExtractor={(s) => s._id}
+          contentContainerStyle={{ paddingBottom: spacing.lg }}
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.primary} />}
+          renderItem={({ item, index }) => (
+            <SlotCard
+              item={item}
+              index={index}
+              onPress={() => navigation.navigate('SlotDetail', { slotId: item._id })}
+            />
+          )}
+        />
+      </View>
     </View>
   );
 }
