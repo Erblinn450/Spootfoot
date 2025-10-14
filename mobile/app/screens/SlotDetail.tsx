@@ -7,8 +7,8 @@ import type { RootStackParamList } from '../navigation/types';
 import { colors, spacing, radius, shadows } from '../theme';
 import PrimaryButton from '../components/PrimaryButton';
 import { useNavigation } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUser } from '../state/UserContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type SlotData = {
   _id: string;
@@ -58,7 +58,11 @@ export default function SlotDetail() {
     if (!email.trim()) return window.alert('❌ Veuillez entrer votre email');
     
     setReserving(true);
+    console.log('🔄 Début réservation:', { slotId, email });
+    
     try {
+      // Fallback vers l'ancien système pour éviter les problèmes SQLite
+      console.log('📞 Appel API direct...');
       const r = await fetch(`${BASE_URL}/reservations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -67,10 +71,11 @@ export default function SlotDetail() {
       
       if (r.ok) {
         const data = await r.json();
+        console.log('✅ Réponse API:', data);
         
-        // Sauvegarder la réservation dans la liste
+        // Sauvegarder la réservation dans AsyncStorage
         try {
-          const m = String(data.inviteUrl).match(/invitations\/(.+)$/) || String(data.inviteUrl).match(/invite\/(.+)$/);
+          const m = String(data.inviteUrl).match(/\/i\/(.+)$/) || String(data.inviteUrl).match(/invitations\/(.+)$/) || String(data.inviteUrl).match(/invite\/(.+)$/);
           const token = m?.[1];
           const newReservation = { slotId, inviteUrl: data.inviteUrl, token, createdAt: Date.now() };
           
@@ -83,12 +88,11 @@ export default function SlotDetail() {
           
           // Sauvegarder
           await AsyncStorage.setItem('reservations', JSON.stringify(updated));
-          
-          // Garder aussi last_reservation pour compatibilité
-          await AsyncStorage.setItem('last_reservation', JSON.stringify(newReservation));
-        } catch {}
+        } catch (e) {
+          console.warn('Erreur sauvegarde AsyncStorage:', e);
+        }
         
-        window.alert('✅ Réservation confirmée ! Vous allez être redirigé vers vos réservations.');
+        window.alert('✅ Réservation confirmée !');
         
         // Rediriger vers l'onglet Réservations
         setTimeout(() => {
@@ -100,11 +104,15 @@ export default function SlotDetail() {
         }, 500);
       } else {
         const msg = await r.text();
-        window.alert('❌ Erreur: ' + (msg || 'Réservation impossible'));
+        throw new Error(msg || 'Réservation impossible');
       }
+      
     } catch (e: any) {
-      window.alert('❌ Erreur réseau: ' + (e?.message ?? 'Impossible de contacter le serveur'));
+      console.error('❌ Erreur réservation:', e);
+      window.alert('❌ Erreur: ' + (e?.message || 'Impossible de contacter le serveur'));
+      
     } finally {
+      console.log('🏁 Fin réservation, setReserving(false)');
       setReserving(false);
     }
   };

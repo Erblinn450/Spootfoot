@@ -1,10 +1,9 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
-import { colors, spacing, radius, shadows } from '../theme';
-import PrimaryButton from '../components/PrimaryButton';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
+import React from 'react';
+import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import { colors, radius, shadows, spacing } from '../theme';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type SavedReservation = { slotId: string; inviteUrl: string; token?: string; createdAt: number };
 
@@ -14,9 +13,11 @@ export default function Reservations() {
 
   const load = React.useCallback(async () => {
     try {
+      // Utiliser AsyncStorage (stable)
       const raw = await AsyncStorage.getItem('reservations');
       setReservations(raw ? JSON.parse(raw) : []);
-    } catch {
+    } catch (error) {
+      console.error('Erreur chargement réservations:', error);
       setReservations([]);
     }
   }, []);
@@ -35,8 +36,8 @@ export default function Reservations() {
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Header moderne */}
-      <View style={{ 
-        backgroundColor: colors.primary, 
+      <View style={{
+        backgroundColor: colors.primary,
         paddingTop: spacing.xl,
         paddingBottom: spacing.xl,
         paddingHorizontal: spacing.xl,
@@ -54,11 +55,11 @@ export default function Reservations() {
             </Text>
           </View>
           {reservations.length > 0 && (
-            <View style={{ 
-              backgroundColor: 'white', 
-              paddingHorizontal: spacing.md, 
-              paddingVertical: spacing.xs, 
-              borderRadius: radius.pill 
+            <View style={{
+              backgroundColor: 'white',
+              paddingHorizontal: spacing.md,
+              paddingVertical: spacing.xs,
+              borderRadius: radius.pill
             }}>
               <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>
                 {reservations.length}
@@ -135,9 +136,9 @@ export default function Reservations() {
                 </View>
               </View>
 
-              <View style={{ 
-                backgroundColor: colors.backgroundDark, 
-                padding: spacing.md, 
+              <View style={{
+                backgroundColor: colors.backgroundDark,
+                padding: spacing.md,
                 borderRadius: radius.md,
                 marginBottom: spacing.lg,
               }}>
@@ -150,9 +151,9 @@ export default function Reservations() {
                   <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15, marginBottom: spacing.md }}>
                     👥 Lien d'invitation
                   </Text>
-                  <View style={{ 
-                    backgroundColor: colors.primarySoft, 
-                    padding: spacing.md, 
+                  <View style={{
+                    backgroundColor: colors.primarySoft,
+                    padding: spacing.md,
                     borderRadius: radius.md,
                     marginBottom: spacing.lg,
                   }}>
@@ -195,9 +196,9 @@ export default function Reservations() {
                   </View>
                 </>
               ) : (
-                <View style={{ 
-                  backgroundColor: '#FEF3C7', 
-                  padding: spacing.md, 
+                <View style={{
+                  backgroundColor: '#FEF3C7',
+                  padding: spacing.md,
                   borderRadius: radius.md,
                   borderLeftWidth: 3,
                   borderLeftColor: colors.warning,

@@ -5,7 +5,7 @@ import { ReservationsService } from '../reservations/reservations.service';
 import { SlotsService } from '../slots/slots.service';
 
 @ApiTags('invitations')
-@Controller('invitations')
+@Controller(['invitations', 'i'])
 export class InvitationsController {
   constructor(
     private readonly reservationsService: ReservationsService,

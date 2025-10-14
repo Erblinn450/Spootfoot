@@ -37,6 +37,21 @@ function TerrainsStack() {
   );
 }
 
+function ReservationsStack() {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.primarySoft },
+        headerShadowVisible: false,
+        headerTitleStyle: { color: colors.text },
+      }}
+    >
+      <Stack.Screen name="ReservationsList" component={Reservations} options={{ headerShown: false }} />
+      <Stack.Screen name="InviteLanding" component={InviteLanding} options={{ title: 'Invitation' }} />
+    </Stack.Navigator>
+  );
+}
+
 function MainTabs() {
   const { isAdmin } = useUser();
   return (
@@ -60,7 +75,7 @@ function MainTabs() {
       })}
     >
       <Tab.Screen name="Terrains" component={TerrainsStack} />
-      <Tab.Screen name="Réservations" component={Reservations} />
+      <Tab.Screen name="Réservations" component={ReservationsStack} />
       <Tab.Screen name="Profil" component={Profile} />
       {isAdmin && <Tab.Screen name="Admin" component={CalendarAdmin} />}
     </Tab.Navigator>
