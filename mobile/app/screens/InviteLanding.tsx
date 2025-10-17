@@ -8,6 +8,7 @@ import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '../navigation/types';
 import { useUser } from '../state/UserContext';
 import * as Clipboard from 'expo-clipboard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type InviteInfo = { 
   slot: { 
@@ -38,6 +39,8 @@ export default function InviteLanding() {
   const [token, setToken] = React.useState(sanitizeToken(initialToken));
   const [info, setInfo] = React.useState<InviteInfo | null>(null);
   const [loading, setLoading] = React.useState(false);
+  const [accepting, setAccepting] = React.useState(false); // État pour éviter double clic
+  const [hasAccepted, setHasAccepted] = React.useState(false); // Marquer si déjà accepté
   const [error, setError] = React.useState<string | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
   const { user } = useUser();
@@ -60,50 +63,98 @@ export default function InviteLanding() {
     }
   }, [token]);
 
+  // Vérifier si l'utilisateur a déjà accepté cette invitation
+  const checkIfAlreadyAccepted = React.useCallback(async (inviteToken: string) => {
+    try {
+      const key = `accepted_${inviteToken}`;
+      console.log('🔍 Vérification acceptation pour:', key);
+      const value = await AsyncStorage.getItem(key);
+      console.log('📦 Valeur AsyncStorage:', value);
+      if (value === 'true') {
+        console.log('✅ Déjà accepté !');
+        setHasAccepted(true);
+      } else {
+        console.log('❌ Pas encore accepté');
+        setHasAccepted(false);
+      }
+    } catch (e) {
+      console.warn('Erreur vérification acceptation:', e);
+    }
+  }, []);
+
   // Charger automatiquement si un token/URL est fourni par navigation
   React.useEffect(() => {
     const t = sanitizeToken(initialToken || paramInviteUrl || '');
     if (t && t !== token) setToken(t);
-    if (t) load();
+    if (t) {
+      load();
+      // Vérifier si déjà accepté
+      checkIfAlreadyAccepted(t);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialToken, paramInviteUrl]);
 
+  // Vérifier aussi quand le token change
+  React.useEffect(() => {
+    if (token) {
+      checkIfAlreadyAccepted(token);
+    }
+  }, [token, checkIfAlreadyAccepted]);
+
   // Acceptation de l'invitation
   const accept = async () => {
-    if (!token) return;
-    const r = await fetch(`${BASE_URL}/invitations/${token}/accept`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: user.email ? JSON.stringify({ email: user.email }) : undefined,
-    });
-    if (r.ok) {
-      let acceptedCount: number | undefined = undefined;
-      try {
-        // Certaines implémentations peuvent renvoyer 204 No Content
-        const text = await r.text();
-        if (text) {
-          const data = JSON.parse(text);
-          acceptedCount = data?.acceptedCount;
+    if (!token || accepting || hasAccepted) return; // Empêcher double clic et re-clic après succès
+    
+    setAccepting(true); // Désactiver le bouton
+    try {
+      const r = await fetch(`${BASE_URL}/invitations/${token}/accept`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: user.email ? JSON.stringify({ email: user.email }) : undefined,
+      });
+      if (r.ok) {
+        setHasAccepted(true); // Marquer comme accepté définitivement
+        
+        // Sauvegarder dans AsyncStorage pour persistance
+        try {
+          const key = `accepted_${token}`;
+          console.log('💾 Sauvegarde acceptation:', key);
+          await AsyncStorage.setItem(key, 'true');
+          console.log('✅ Acceptation sauvegardée !');
+        } catch (e) {
+          console.warn('❌ Erreur sauvegarde acceptation:', e);
         }
-      } catch {}
-      const msg = acceptedCount !== undefined
-        ? `Merci, vous êtes inscrit. acceptedCount=${acceptedCount}`
-        : 'Merci, vous êtes inscrit.';
-      setMessage(msg);
-      Alert.alert('Inscription', msg);
-      // Recharger les infos pour mettre à jour "Restants"
-      await load();
-      // Aller vers l'onglet Réservations pour visualiser immédiatement
-      try {
-        navigation.getParent()?.navigate('Réservations');
-      } catch {}
-    } else {
-      // Tenter de récupérer un message d'erreur utile
-      let errText = '';
-      try { errText = await r.text(); } catch {}
-      const txt = errText || 'Malheureusement, le créneau est plein';
-      setMessage(txt);
-      Alert.alert('Complet', txt);
+        
+        let acceptedCount: number | undefined = undefined;
+        try {
+          // Certaines implémentations peuvent renvoyer 204 No Content
+          const text = await r.text();
+          if (text) {
+            const data = JSON.parse(text);
+            acceptedCount = data?.acceptedCount;
+          }
+        } catch {}
+        const msg = acceptedCount !== undefined
+          ? `Merci, vous êtes inscrit. acceptedCount=${acceptedCount}`
+          : 'Merci, vous êtes inscrit.';
+        setMessage(msg);
+        Alert.alert('Inscription', msg);
+        // Recharger les infos pour mettre à jour "Restants"
+        await load();
+        // Aller vers l'onglet Réservations pour visualiser immédiatement
+        try {
+          navigation.getParent()?.navigate('Réservations');
+        } catch {}
+      } else {
+        // Tenter de récupérer un message d'erreur utile
+        let errText = '';
+        try { errText = await r.text(); } catch {}
+        const txt = errText || 'Malheureusement, le créneau est plein';
+        setMessage(txt);
+        Alert.alert('Complet', txt);
+      }
+    } finally {
+      setAccepting(false); // Réactiver le bouton (sauf si hasAccepted est true)
     }
   };
 
@@ -285,17 +336,18 @@ export default function InviteLanding() {
 
               <TouchableOpacity
                 style={{
-                  backgroundColor: info.restants > 0 ? colors.success : colors.textMuted,
+                  backgroundColor: (info.restants > 0 && !accepting && !hasAccepted) ? colors.success : colors.textMuted,
                   padding: spacing.lg,
                   borderRadius: radius.lg,
                   alignItems: 'center',
                   ...shadows.md,
+                  opacity: (accepting || hasAccepted) ? 0.6 : 1,
                 }}
                 onPress={accept}
-                disabled={info.restants === 0}
+                disabled={info.restants === 0 || accepting || hasAccepted}
               >
                 <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>
-                  {info.restants > 0 ? '✅ Je viens !' : '❌ Complet'}
+                  {hasAccepted ? '✅ Déjà inscrit' : accepting ? '⏳ Inscription...' : info.restants > 0 ? '✅ Je viens !' : '❌ Complet'}
                 </Text>
               </TouchableOpacity>
             </View>
