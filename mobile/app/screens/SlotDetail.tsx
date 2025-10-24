@@ -9,6 +9,8 @@ import PrimaryButton from '../components/PrimaryButton';
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '../state/UserContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
+import { databaseService } from '../services/database';
 
 type SlotData = {
   _id: string;
@@ -29,6 +31,7 @@ export default function SlotDetail() {
   const [slot, setSlot] = React.useState<SlotData | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [reserving, setReserving] = React.useState(false);
+  const [offlineMode, setOfflineMode] = React.useState(false);
 
   // Charger les données du créneau
   React.useEffect(() => {
@@ -48,20 +51,142 @@ export default function SlotDetail() {
     };
     loadSlot();
   }, [slotId]);
-
   React.useEffect(() => {
     if (user.email) setEmail(user.email);
   }, [user.email]);
 
+  // Synchronisation automatique au retour en ligne
+  React.useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      if (state.isConnected && offlineMode) {
+        console.log('🌐 Connexion rétablie, tentative de synchronisation...');
+        syncPendingReservations();
+      }
+    });
+    return () => unsubscribe();
+  }, [offlineMode]);
+
+  // Fonction pour synchroniser les réservations en attente
+  const syncPendingReservations = async () => {
+    try {
+      const pendingRaw = await AsyncStorage.getItem('pending_reservations');
+      if (!pendingRaw) return;
+      
+      const pending = JSON.parse(pendingRaw);
+      if (pending.length === 0) return;
+
+      console.log('📤 Synchronisation de', pending.length, 'réservation(s) en attente...');
+      
+      // Vérifier si ces créneaux ne sont pas déjà réservés
+      const existingRaw = await AsyncStorage.getItem('reservations');
+      const existingReservations = existingRaw ? JSON.parse(existingRaw) : [];
+      const existingSlotIds = new Set(existingReservations.map((r: any) => r.slotId));
+      
+      // Filtrer les réservations en attente qui ne sont pas déjà confirmées
+      const toSync = pending.filter((p: any) => !existingSlotIds.has(p.slotId));
+      
+      if (toSync.length === 0) {
+        console.log('✅ Toutes les réservations en attente sont déjà confirmées');
+        await AsyncStorage.removeItem('pending_reservations');
+        setOfflineMode(false);
+        return;
+      }
+      
+      console.log('📤 Réservations à synchroniser:', toSync.length);
+      
+      const results = {
+        success: [] as any[],
+        failed: [] as any[],
+      };
+      
+      // Essayer de synchroniser chaque réservation
+      for (const reservation of toSync) {
+        try {
+          const response = await fetch(`${BASE_URL}/reservations`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              slotId: reservation.slotId, 
+              organizerEmail: reservation.email 
+            }),
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log('✅ Réservation synchronisée:', reservation.slotId);
+            
+            // Sauvegarder dans AsyncStorage
+            const m = String(data.inviteUrl).match(/\/i\/(.+)$/) || String(data.inviteUrl).match(/invitations\/(.+)$/) || String(data.inviteUrl).match(/invite\/(.+)$/);
+            const token = m?.[1];
+            
+            const existingRaw = await AsyncStorage.getItem('reservations');
+            const existing = existingRaw ? JSON.parse(existingRaw) : [];
+            existing.unshift({ 
+              slotId: reservation.slotId, 
+              inviteUrl: data.inviteUrl, 
+              token, 
+              createdAt: Date.now() 
+            });
+            await AsyncStorage.setItem('reservations', JSON.stringify(existing));
+            
+            results.success.push(reservation);
+          } else {
+            // Erreur HTTP (404, 409, etc.)
+            const errorText = await response.text();
+            console.error('❌ Échec sync réservation:', response.status, errorText);
+            
+            let errorMessage = 'Erreur inconnue';
+            if (response.status === 404) {
+              errorMessage = 'Créneau introuvable (supprimé)';
+            } else if (response.status === 409 || errorText.includes('not open')) {
+              errorMessage = 'Créneau complet ou déjà réservé';
+            } else {
+              errorMessage = errorText || `Erreur ${response.status}`;
+            }
+            
+            results.failed.push({ ...reservation, error: errorMessage });
+          }
+        } catch (err: any) {
+          console.error('❌ Erreur réseau sync réservation:', err);
+          results.failed.push({ ...reservation, error: 'Erreur réseau' });
+        }
+      }
+      
+      // Vider la liste des réservations en attente
+      await AsyncStorage.removeItem('pending_reservations');
+      setOfflineMode(false);
+      
+      // Afficher le résultat SEULEMENT si au moins une réservation a réussi
+      if (results.success.length > 0) {
+        window.alert(`✅ Synchronisation terminée !\n\n${results.success.length} réservation(s) envoyée(s) au serveur.`);
+        
+        // Rediriger vers Réservations
+        setTimeout(() => {
+          try { 
+            navigation.getParent()?.navigate('Réservations'); 
+          } catch {
+            navigation.navigate('Réservations');
+          }
+        }, 500);
+      }
+      // Si tout a échoué, on ne fait rien (pas de message d'erreur)
+      
+    } catch (error) {
+      console.error('❌ Erreur synchronisation:', error);
+      window.alert('❌ Erreur lors de la synchronisation\n\nVeuillez réessayer plus tard.');
+    }
+  };
+
   const reserve = async () => {
     if (!slotId) return window.alert('❌ Erreur: slotId manquant');
-    if (!email.trim()) return window.alert('❌ Veuillez entrer votre email');
-    
+    if (!email.trim()) {
+      window.alert('Veuillez saisir votre email');
+      return;
+    }
     setReserving(true);
     console.log('🔄 Début réservation:', { slotId, email });
     
     try {
-      // Fallback vers l'ancien système pour éviter les problèmes SQLite
       console.log('📞 Appel API direct...');
       const r = await fetch(`${BASE_URL}/reservations`, {
         method: 'POST',
@@ -73,28 +198,26 @@ export default function SlotDetail() {
         const data = await r.json();
         console.log('✅ Réponse API:', data);
         
-        // Sauvegarder la réservation dans AsyncStorage
+        // Sauvegarder dans SQLite
         try {
+          await databaseService.init();
           const m = String(data.inviteUrl).match(/\/i\/(.+)$/) || String(data.inviteUrl).match(/invitations\/(.+)$/) || String(data.inviteUrl).match(/invite\/(.+)$/);
           const token = m?.[1];
-          const newReservation = { slotId, inviteUrl: data.inviteUrl, token, createdAt: Date.now() };
           
-          // Récupérer les réservations existantes
-          const existingRaw = await AsyncStorage.getItem('reservations');
-          const existing = existingRaw ? JSON.parse(existingRaw) : [];
-          
-          // Ajouter la nouvelle réservation
-          const updated = [newReservation, ...existing];
-          
-          // Sauvegarder
-          await AsyncStorage.setItem('reservations', JSON.stringify(updated));
+          const reservationId = await databaseService.addReservation({
+            slotId,
+            inviteUrl: data.inviteUrl,
+            token,
+            createdAt: Date.now(),
+            syncStatus: 'synced',
+          });
+          console.log('✅ Réservation sauvegardée dans SQLite avec ID:', reservationId);
         } catch (e) {
-          console.warn('Erreur sauvegarde AsyncStorage:', e);
+          console.error('❌ Erreur sauvegarde SQLite:', e);
         }
         
         window.alert('✅ Réservation confirmée !');
         
-        // Rediriger vers l'onglet Réservations
         setTimeout(() => {
           try { 
             navigation.getParent()?.navigate('Réservations'); 
@@ -109,13 +232,44 @@ export default function SlotDetail() {
       
     } catch (e: any) {
       console.error('❌ Erreur réservation:', e);
-      window.alert('❌ Erreur: ' + (e?.message || 'Impossible de contacter le serveur'));
+      
+      // Détecter si c'est une erreur réseau (mode hors ligne)
+      const isOffline = e?.message?.includes('Failed to fetch') || 
+                        e?.message?.includes('Network request failed') ||
+                        e?.message?.includes('ERR_INTERNET_DISCONNECTED');
+      
+      if (isOffline) {
+        // Mode hors ligne : sauvegarder localement
+        try {
+          const pendingReservation = {
+            slotId,
+            email,
+            createdAt: Date.now(),
+            status: 'pending',
+          };
+          
+          const pendingRaw = await AsyncStorage.getItem('pending_reservations');
+          const pending = pendingRaw ? JSON.parse(pendingRaw) : [];
+          pending.push(pendingReservation);
+          await AsyncStorage.setItem('pending_reservations', JSON.stringify(pending));
+          
+          setOfflineMode(true); // Activer le mode hors ligne pour afficher le bouton "Réessayer"
+          window.alert('📴 Mode hors ligne détecté\n\n✅ Votre réservation a été sauvegardée localement.\n\nElle sera automatiquement envoyée au serveur dès que vous serez de nouveau en ligne.\n\n⚠️ Reconnectez-vous à internet puis cliquez sur "Réessayer".');
+        } catch (saveError) {
+          console.error('Erreur sauvegarde hors ligne:', saveError);
+          window.alert('❌ Impossible de sauvegarder la réservation hors ligne');
+        }
+      } else {
+        // Autre erreur
+        window.alert('❌ Erreur: ' + (e?.message || 'Impossible de contacter le serveur'));
+      }
       
     } finally {
       console.log('🏁 Fin réservation, setReserving(false)');
       setReserving(false);
     }
   };
+
   if (loading) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }}>
@@ -258,7 +412,7 @@ export default function SlotDetail() {
         {/* Bouton de confirmation */}
         <TouchableOpacity
           style={{
-            backgroundColor: reserving ? colors.textMuted : colors.primary,
+            backgroundColor: reserving ? colors.textMuted : offlineMode ? colors.warning : colors.primary,
             padding: spacing.lg,
             borderRadius: radius.xl,
             alignItems: 'center',
@@ -268,7 +422,7 @@ export default function SlotDetail() {
           disabled={reserving}
         >
           <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>
-            {reserving ? '⏳ Réservation en cours...' : '✅ Confirmer la réservation'}
+            {reserving ? '⏳ Réservation en cours...' : offlineMode ? '🔄 Réessayer (reconnectez-vous)' : '✅ Confirmer la réservation'}
           </Text>
         </TouchableOpacity>
       </View>
