@@ -3,19 +3,101 @@ import * as Clipboard from 'expo-clipboard';
 import React from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { colors, radius, shadows, spacing } from '../theme';
+import { BASE_URL } from '../config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { databaseService } from '../services/database';
 
 type SavedReservation = { slotId: string; inviteUrl: string; token?: string; createdAt: number };
 
 export default function Reservations() {
   const navigation = useNavigation<any>();
   const [reservations, setReservations] = React.useState<SavedReservation[]>([]);
+  const abortControllerRef = React.useRef<AbortController | null>(null);
+  const cacheRef = React.useRef<Map<string, { exists: boolean; timestamp: number }>>(new Map());
+  const CACHE_DURATION = 5000; // 5 secondes de cache
+
+  // Vérifier si un créneau existe encore (avec cache)
+  const checkSlotExists = async (slotId: string): Promise<boolean> => {
+    // Vérifier le cache
+    const cached = cacheRef.current.get(slotId);
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      console.log('📦 Cache hit pour:', slotId);
+      return cached.exists;
+    }
+
+    try {
+      console.log('🔍 Vérification créneau:', slotId);
+      const response = await fetch(`${BASE_URL}/slots/${slotId}`, {
+        signal: abortControllerRef.current?.signal,
+      });
+      const exists = response.ok;
+      
+      // Mettre en cache
+      cacheRef.current.set(slotId, { exists, timestamp: Date.now() });
+      
+      if (!exists) {
+        console.log('❌ Créneau n\'existe plus:', slotId);
+      }
+      return exists;
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log('🚫 Requête annulée');
+        return true; // On garde la réservation si la requête est annulée
+      }
+      console.error('❌ Erreur vérification créneau:', error);
+      return false;
+    }
+  };
 
   const load = React.useCallback(async () => {
+    // Annuler les requêtes précédentes
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
     try {
-      // Utiliser AsyncStorage (stable)
-      const raw = await AsyncStorage.getItem('reservations');
-      setReservations(raw ? JSON.parse(raw) : []);
+      // Charger depuis SQLite
+      await databaseService.init();
+      const sqliteReservations = await databaseService.getReservations();
+      
+      // Convertir au format SavedReservation
+      const allReservations: SavedReservation[] = sqliteReservations.map(r => ({
+        slotId: r.slotId,
+        inviteUrl: r.inviteUrl,
+        token: r.token,
+        createdAt: r.createdAt,
+      }));
+      
+      console.log('✅ Réservations chargées depuis SQLite:', allReservations.length);
+      
+      if (allReservations.length === 0) {
+        setReservations([]);
+        return;
+      }
+
+      // Vérifier en parallèle (batch) au lieu de séquentiel
+      const validationPromises = allReservations.map(async (reservation) => {
+        const exists = await checkSlotExists(reservation.slotId);
+        return { reservation, exists };
+      });
+
+      const results = await Promise.all(validationPromises);
+      
+      // Filtrer les réservations valides
+      const validReservations = results.filter(r => r.exists).map(r => r.reservation);
+      
+      // Supprimer les réservations orphelines
+      const orphanedReservations = results.filter(r => !r.exists);
+      if (orphanedReservations.length > 0) {
+        for (const orphaned of orphanedReservations) {
+          console.log('🗑️ Suppression réservation orpheline:', orphaned.reservation.slotId);
+        }
+        // Mettre à jour AsyncStorage avec seulement les réservations valides
+        await AsyncStorage.setItem('reservations', JSON.stringify(validReservations));
+      }
+      
+      setReservations(validReservations);
     } catch (error) {
       console.error('Erreur chargement réservations:', error);
       setReservations([]);
@@ -31,6 +113,20 @@ export default function Reservations() {
   useFocusEffect(
     React.useCallback(() => {
       load();
+      
+      // Vérifier périodiquement (toutes les 10 secondes) - le cache évite les requêtes inutiles
+      const interval = setInterval(() => {
+        console.log('🔄 Vérification automatique des réservations...');
+        load();
+      }, 10000);
+      
+      // Nettoyer l'intervalle et annuler les requêtes en cours quand on quitte l'onglet
+      return () => {
+        clearInterval(interval);
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+        }
+      };
     }, [load])
   );
   return (
