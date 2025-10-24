@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { colors, spacing, radius, shadows } from '../theme';
 import PrimaryButton from '../components/PrimaryButton';
 import { useUser } from '../state/UserContext';
@@ -18,7 +18,7 @@ export default function Profile() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Header moderne */}
       <View style={{ 
         backgroundColor: colors.primary, 
@@ -156,6 +156,6 @@ export default function Profile() {
           </Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );
 }
