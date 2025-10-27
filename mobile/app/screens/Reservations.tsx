@@ -57,7 +57,7 @@ export default function Reservations() {
     abortControllerRef.current = new AbortController();
 
     try {
-      // Charger depuis SQLite
+      // Charger depuis AsyncStorage
       await databaseService.init();
       const sqliteReservations = await databaseService.getReservations();
       
@@ -69,7 +69,7 @@ export default function Reservations() {
         createdAt: r.createdAt,
       }));
       
-      console.log('✅ Réservations chargées depuis SQLite:', allReservations.length);
+      console.log('✅ Réservations chargées depuis AsyncStorage:', allReservations.length);
       
       if (allReservations.length === 0) {
         setReservations([]);

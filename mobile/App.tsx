@@ -15,6 +15,13 @@ import Profile from './app/screens/Profile';
 import { UserProvider } from './app/state/UserContext';
 import CalendarAdmin from './app/screens/CalendarAdmin';
 import { useUser } from './app/state/UserContext';
+import { databaseService } from './app/services/database';
+
+// Exposer la fonction pour la démo (accessible dans la console du navigateur)
+if (typeof window !== 'undefined') {
+  (window as any).showBDD = () => databaseService.showAllData();
+  console.log('💡 Pour afficher le contenu de la BDD locale, tapez: showBDD()');
+}
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const RootStack = createNativeStackNavigator();

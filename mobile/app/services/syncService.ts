@@ -1,232 +1,98 @@
-import { databaseService, LocalReservation, SyncAction } from './database';
-import { apiClient } from '../utils/apiClient';
-import NetInfo from '@react-native-community/netinfo';
+// Service de synchronisation pour AsyncStorage
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BASE_URL } from '../config';
 
 class SyncService {
-  private isOnline = true;
-  private syncInProgress = false;
-
-  constructor() {
-    this.initNetworkListener();
-  }
-
-  private initNetworkListener() {
-    NetInfo.addEventListener(state => {
-      const wasOffline = !this.isOnline;
-      this.isOnline = state.isConnected ?? false;
-      
-      console.log(`📶 Connexion: ${this.isOnline ? 'EN LIGNE' : 'HORS LIGNE'}`);
-      
-      // Si on revient en ligne, synchroniser automatiquement
-      if (wasOffline && this.isOnline) {
-        console.log('🔄 Retour en ligne - Synchronisation automatique');
-        this.syncAll();
-      }
-    });
-  }
-
-  async createReservation(slotId: string, organizerEmail: string): Promise<LocalReservation> {
-    console.log('🔄 SyncService.createReservation début:', { slotId, organizerEmail, isOnline: this.isOnline });
-    
-    const reservation: Omit<LocalReservation, 'id'> = {
-      slotId,
-      inviteUrl: '', // Sera rempli après sync
-      token: undefined,
-      createdAt: Date.now(),
-      syncStatus: this.isOnline ? 'pending' : 'pending',
-    };
-
-    console.log('💾 Sauvegarde en local...');
-    // Sauvegarder en local immédiatement
-    const localId = await databaseService.addReservation(reservation);
-    console.log('✅ Sauvegardé avec ID:', localId);
-    
-    if (this.isOnline) {
-      // Essayer de synchroniser immédiatement
-      try {
-        const response = await apiClient.post('/reservations', {
-          slotId,
-          organizerEmail,
-        });
-
-        // Mettre à jour avec les données du serveur
-        const updatedReservation: LocalReservation = {
-          id: localId,
-          slotId,
-          inviteUrl: response.data?.inviteUrl || '',
-          token: this.extractToken(response.data?.inviteUrl || ''),
-          createdAt: reservation.createdAt,
-          syncStatus: 'synced',
-          lastSyncAt: Date.now(),
-        };
-
-        await databaseService.updateReservationSyncStatus(localId, 'synced');
-        
-        console.log('✅ Réservation créée et synchronisée');
-        return updatedReservation;
-      } catch (error) {
-        console.log('❌ Erreur sync immédiate, ajout à la queue');
-        
-        // Ajouter à la queue de synchronisation
-        await databaseService.addSyncAction({
-          type: 'CREATE_RESERVATION',
-          data: { localId, slotId, organizerEmail },
-          createdAt: Date.now(),
-          attempts: 0,
-          status: 'pending',
-        });
-
-        await databaseService.updateReservationSyncStatus(localId, 'failed');
-        throw error;
-      }
-    } else {
-      // Mode hors-ligne : ajouter à la queue
-      console.log('📴 Mode hors-ligne - Ajout à la queue');
-      
-      await databaseService.addSyncAction({
-        type: 'CREATE_RESERVATION',
-        data: { localId, slotId, organizerEmail },
-        createdAt: Date.now(),
-        attempts: 0,
-        status: 'pending',
-      });
-
-      return {
-        id: localId,
-        ...reservation,
-      };
-    }
-  }
-
-  async syncAll(): Promise<void> {
-    if (this.syncInProgress || !this.isOnline) {
-      console.log('🔄 Sync déjà en cours ou hors ligne');
-      return;
-    }
-
-    this.syncInProgress = true;
-    console.log('🔄 Début de la synchronisation...');
-
+  async syncPendingReservations() {
     try {
-      // 1. Traiter la queue des actions en attente
-      await this.processSyncQueue();
+      const pendingRaw = await AsyncStorage.getItem('pending_reservations');
+      if (!pendingRaw) return { success: [], failed: [] };
       
-      // 2. Synchroniser les réservations depuis le serveur
-      await this.syncReservationsFromServer();
-      
-      // 3. Nettoyer les actions terminées
-      await databaseService.clearCompletedSyncActions();
-      
-      console.log('✅ Synchronisation terminée');
-    } catch (error) {
-      console.error('❌ Erreur lors de la synchronisation:', error);
-    } finally {
-      this.syncInProgress = false;
-    }
-  }
+      const pending = JSON.parse(pendingRaw);
+      if (pending.length === 0) return { success: [], failed: [] };
 
-  private async processSyncQueue(): Promise<void> {
-    const pendingActions = await databaseService.getPendingSyncActions();
-    
-    console.log(`📋 ${pendingActions.length} actions en attente`);
-
-    for (const action of pendingActions) {
-      try {
-        await this.processAction(action);
-        await databaseService.updateSyncActionStatus(action.id, 'completed');
-      } catch (error) {
-        console.error(`❌ Erreur action ${action.id}:`, error);
-        
-        // Marquer comme échoué après 3 tentatives
-        if (action.attempts >= 2) {
-          await databaseService.updateSyncActionStatus(action.id, 'failed');
-        } else {
-          await databaseService.updateSyncActionStatus(action.id, 'pending', true);
+      console.log('📤 Synchronisation de', pending.length, 'réservation(s) en attente...');
+      
+      const results: any = { success: [], failed: [] };
+      
+      for (const reservation of pending) {
+        try {
+          const response = await fetch(`${BASE_URL}/reservations`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              slotId: reservation.slotId, 
+              organizerEmail: reservation.email 
+            }),
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            
+            const existingRaw = await AsyncStorage.getItem('reservations');
+            const existing = existingRaw ? JSON.parse(existingRaw) : [];
+            const m = String(data.inviteUrl).match(/\/i\/(.+)$/) || String(data.inviteUrl).match(/invitations\/(.+)$/) || String(data.inviteUrl).match(/invite\/(.+)$/);
+            const token = m?.[1];
+            
+            existing.unshift({ 
+              slotId: reservation.slotId, 
+              inviteUrl: data.inviteUrl, 
+              token, 
+              createdAt: Date.now() 
+            });
+            await AsyncStorage.setItem('reservations', JSON.stringify(existing));
+            
+            results.success.push(reservation);
+            console.log('✅ Réservation synchronisée:', reservation.slotId);
+          } else {
+            results.failed.push({ reservation, error: `HTTP ${response.status}` });
+            console.error('❌ Échec sync réservation:', response.status);
+          }
+        } catch (error: any) {
+          results.failed.push({ reservation, error: error.message });
+          console.error('❌ Erreur sync réservation:', error);
         }
       }
-    }
-  }
-
-  private async processAction(action: SyncAction): Promise<void> {
-    switch (action.type) {
-      case 'CREATE_RESERVATION':
-        await this.syncCreateReservation(action.data);
-        break;
-      case 'UPDATE_RESERVATION':
-        await this.syncUpdateReservation(action.data);
-        break;
-      case 'DELETE_RESERVATION':
-        await this.syncDeleteReservation(action.data);
-        break;
-      default:
-        console.warn('Type d\'action inconnu:', action.type);
-    }
-  }
-
-  private async syncCreateReservation(data: any): Promise<void> {
-    const { localId, slotId, organizerEmail } = data;
-    
-    const response = await apiClient.post('/reservations', {
-      slotId,
-      organizerEmail,
-    });
-
-    // Mettre à jour la réservation locale avec les données du serveur
-    await databaseService.updateReservationSyncStatus(localId, 'synced');
-    
-    console.log(`✅ Réservation ${localId} synchronisée`);
-  }
-
-  private async syncUpdateReservation(data: any): Promise<void> {
-    // À implémenter si nécessaire
-    console.log('🔄 Sync update reservation:', data);
-  }
-
-  private async syncDeleteReservation(data: any): Promise<void> {
-    // À implémenter si nécessaire
-    console.log('🔄 Sync delete reservation:', data);
-  }
-
-  private async syncReservationsFromServer(): Promise<void> {
-    try {
-      // Note: Il faudrait un endpoint pour récupérer les réservations de l'utilisateur
-      // Pour l'instant on garde les données locales
-      console.log('📥 Sync depuis serveur (à implémenter)');
+      
+      if (results.success.length > 0) {
+        const remaining = pending.filter((p: any) => 
+          !results.success.some((s: any) => s.slotId === p.slotId)
+        );
+        
+        if (remaining.length === 0) {
+          await AsyncStorage.removeItem('pending_reservations');
+        } else {
+          await AsyncStorage.setItem('pending_reservations', JSON.stringify(remaining));
+        }
+      }
+      
+      return results;
     } catch (error) {
-      console.error('❌ Erreur sync depuis serveur:', error);
+      console.error('❌ Erreur synchronisation:', error);
+      return { success: [], failed: [] };
     }
   }
-
-  private extractToken(inviteUrl: string): string | undefined {
-    const match = inviteUrl.match(/\/(?:invitations|invite|i)\/([^/?#]+)/);
-    return match?.[1];
-  }
-
-  // Utilitaires publics
-  async getLocalReservations(): Promise<LocalReservation[]> {
-    return await databaseService.getReservations();
-  }
-
-  async getSyncStats() {
-    const stats = await databaseService.getStats();
-    return {
-      ...stats,
-      isOnline: this.isOnline,
-      syncInProgress: this.syncInProgress,
-    };
-  }
-
-  async forceSyncAll(): Promise<void> {
-    if (this.isOnline) {
-      await this.syncAll();
-    } else {
-      throw new Error('Impossible de synchroniser hors ligne');
+  
+  async addPendingReservation(reservation: any) {
+    try {
+      const existingRaw = await AsyncStorage.getItem('pending_reservations');
+      const existing = existingRaw ? JSON.parse(existingRaw) : [];
+      existing.push(reservation);
+      await AsyncStorage.setItem('pending_reservations', JSON.stringify(existing));
+      console.log('📝 Réservation ajoutée en attente:', reservation.slotId);
+    } catch (error) {
+      console.error('❌ Erreur ajout réservation en attente:', error);
     }
   }
-
-  async clearAllLocalData(): Promise<void> {
-    await databaseService.clearAllData();
-    console.log('🗑️ Toutes les données locales supprimées');
+  
+  async getPendingCount(): Promise<number> {
+    try {
+      const pendingRaw = await AsyncStorage.getItem('pending_reservations');
+      const pending = pendingRaw ? JSON.parse(pendingRaw) : [];
+      return pending.length;
+    } catch (error) {
+      return 0;
+    }
   }
 }
 

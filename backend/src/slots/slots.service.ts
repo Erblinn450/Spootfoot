@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Slot, SlotDocument } from './slot.schema';
@@ -9,9 +9,16 @@ export class SlotsService {
 
   async create(data: { terrainId: string; startAt: string | Date; durationMin?: number; capacity?: number }) {
     const start = new Date(data.startAt);
-    if (isNaN(start.getTime()) || start.getTime() <= Date.now()) {
-      throw new Error('startAt must be a future date');
+    console.log('[SlotsService] Creating slot:', { terrainId: data.terrainId, startAt: data.startAt, parsed: start, now: new Date() });
+    
+    if (isNaN(start.getTime())) {
+      throw new BadRequestException('Invalid date format for startAt');
     }
+    
+    if (start.getTime() <= Date.now()) {
+      throw new BadRequestException(`startAt must be a future date. Provided: ${start.toISOString()}, Current: ${new Date().toISOString()}`);
+    }
+    
     const duration = data.durationMin ?? 60;
     const capacity = data.capacity ?? 10;
     return new this.slotModel({ terrainId: data.terrainId, startAt: start, durationMin: duration, capacity, status: 'OPEN' }).save();

@@ -8,7 +8,7 @@ import { InvitationsModule } from './invitations/invitations.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 
-const mongoUri = process.env.MONGODB_URI || 'mongodb://mongo:27017/spotfoot';
+const mongoUri = process.env.MONGODB_URI || 'mongodb://root:rootpass@localhost:27017/spotfoot?authSource=admin';
 
 @Module({
   imports: [

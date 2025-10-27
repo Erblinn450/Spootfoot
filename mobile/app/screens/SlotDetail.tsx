@@ -11,6 +11,7 @@ import { useUser } from '../state/UserContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import { databaseService } from '../services/database';
+import { syncService } from '../services/syncService';
 
 type SlotData = {
   _id: string;
@@ -198,7 +199,7 @@ export default function SlotDetail() {
         const data = await r.json();
         console.log('✅ Réponse API:', data);
         
-        // Sauvegarder dans SQLite
+        // Sauvegarder dans AsyncStorage
         try {
           await databaseService.init();
           const m = String(data.inviteUrl).match(/\/i\/(.+)$/) || String(data.inviteUrl).match(/invitations\/(.+)$/) || String(data.inviteUrl).match(/invite\/(.+)$/);
@@ -211,9 +212,9 @@ export default function SlotDetail() {
             createdAt: Date.now(),
             syncStatus: 'synced',
           });
-          console.log('✅ Réservation sauvegardée dans SQLite avec ID:', reservationId);
+          console.log('✅ Réservation sauvegardée dans AsyncStorage avec ID:', reservationId);
         } catch (e) {
-          console.error('❌ Erreur sauvegarde SQLite:', e);
+          console.error('❌ Erreur sauvegarde AsyncStorage:', e);
         }
         
         window.alert('✅ Réservation confirmée !');
@@ -240,6 +241,10 @@ export default function SlotDetail() {
       
       if (isOffline) {
         // Mode hors ligne : sauvegarder localement
+        console.log('═══════════════════════════════════════');
+        console.log('📴 MODE HORS CONNEXION DÉTECTÉ');
+        console.log('🔌 Pas de connexion internet disponible');
+        console.log('💾 Sauvegarde locale en cours...');
         try {
           const pendingReservation = {
             slotId,
@@ -248,15 +253,24 @@ export default function SlotDetail() {
             status: 'pending',
           };
           
+          console.log('📝 Création réservation en attente:', pendingReservation);
+          
           const pendingRaw = await AsyncStorage.getItem('pending_reservations');
           const pending = pendingRaw ? JSON.parse(pendingRaw) : [];
           pending.push(pendingReservation);
+          
+          console.log('💾 Écriture dans AsyncStorage (clé: "pending_reservations")');
           await AsyncStorage.setItem('pending_reservations', JSON.stringify(pending));
           
-          setOfflineMode(true); // Activer le mode hors ligne pour afficher le bouton "Réessayer"
-          window.alert('📴 Mode hors ligne détecté\n\n✅ Votre réservation a été sauvegardée localement.\n\nElle sera automatiquement envoyée au serveur dès que vous serez de nouveau en ligne.\n\n⚠️ Reconnectez-vous à internet puis cliquez sur "Réessayer".');
+          console.log('✅ Réservation sauvegardée en BDD locale (mode hors ligne)');
+          console.log('📊 Total réservations en attente:', pending.length);
+          console.log('⚡ Synchronisation automatique dès reconnexion');
+          console.log('═══════════════════════════════════════');
+          
+          setOfflineMode(true);
+          window.alert('📴 Mode hors ligne détecté\n\n✅ Votre réservation a été sauvegardée localement dans AsyncStorage.\n\nElle sera automatiquement envoyée au serveur dès que vous serez de nouveau en ligne.\n\n⚠️ Reconnectez-vous à internet puis cliquez sur "Réessayer".');
         } catch (saveError) {
-          console.error('Erreur sauvegarde hors ligne:', saveError);
+          console.error('❌ Erreur sauvegarde hors ligne:', saveError);
           window.alert('❌ Impossible de sauvegarder la réservation hors ligne');
         }
       } else {
