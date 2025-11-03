@@ -1,0 +1,109 @@
+name: CI/CD Pipeline - Spootfoot
+
+# Déclencheur : à chaque push sur la branche main
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # Job 1: Build et Test du Backend
+  backend-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout du code
+      uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: backend/package-lock.json
+    
+    - name: Installation des dépendances Backend
+      run: |
+        cd backend
+        npm ci
+    
+    - name: Lancement des tests Backend
+      run: |
+        cd backend
+        npm test
+      env:
+        NODE_ENV: test
+
+  # Job 2: Build du Frontend Mobile
+  frontend-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout du code
+      uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: mobile/package-lock.json
+    
+    - name: Installation des dépendances Frontend
+      run: |
+        cd mobile
+        npm ci
+    
+    - name: Build du projet React Native Web
+      run: |
+        cd mobile
+        npm run build:web
+      env:
+        NODE_ENV: production
+
+  # Job 3: Déploiement (seulement si les tests passent)
+  deploy:
+    needs: [backend-tests, frontend-build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout du code
+      uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: mobile/package-lock.json
+    
+    - name: Installation et Build pour déploiement
+      run: |
+        cd mobile
+        npm ci
+        npm run build:web
+    
+    - name: Déploiement sur Netlify
+      uses: netlify/actions/cli@master
+      with:
+        args: deploy --prod --dir=mobile/dist
+      env:
+        NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+  # Job 4: Notification de succès
+  notify:
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Notification de déploiement
+      run: |
+        if [ "${{ needs.deploy.result }}" == "success" ]; then
+          echo "✅ Déploiement réussi ! App disponible sur Netlify"
+        else
+          echo "❌ Échec du déploiement"
+        fi
