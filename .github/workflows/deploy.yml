@@ -112,6 +112,13 @@ jobs:
         export ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}"
         export GITHUB_REPOSITORY="${{ github.repository }}"
 
+        # VÉRIFICATION CRITIQUE DES SECRETS
+        if [ -z "$MONGO_INITDB_ROOT_PASSWORD" ]; then
+          echo "🔴 ERREUR CRITIQUE: Le secret GitHub 'MONGO_INITDB_ROOT_PASSWORD' est vide ou n'existe pas !"
+          echo "👉 Allez dans Settings > Secrets and variables > Actions et ajoutez-le."
+          exit 1
+        fi
+
         echo "🚀 Lancement de Docker Compose..."
         
         # Pull & Up
