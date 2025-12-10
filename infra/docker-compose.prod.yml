@@ -3,6 +3,7 @@ services:
     image: mongo:7
     container_name: spotfoot-mongo
     restart: unless-stopped
+    network_mode: "host"
     environment:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
@@ -13,29 +14,23 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    networks:
-      - spotfoot-network
 
   api:
     image: ghcr.io/erblinn450/spootfoot/spotfoot-backend:latest
     container_name: spotfoot-api
     restart: unless-stopped
+    network_mode: "host"
     environment:
       - NODE_ENV=production
-      - MONGODB_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/spotfoot?authSource=admin
+      # En mode host, "mongo" n'est pas résolu par DNS Docker, on utilise localhost (127.0.0.1)
+      - MONGODB_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@127.0.0.1:27017/spotfoot?authSource=admin
       - JWT_SECRET=${JWT_SECRET}
       - ADMIN_EMAIL=${ADMIN_EMAIL}
-    ports:
-      - "${API_PORT:-3001}:3001"
+      # Le port est géré directement par l'application sur le host
+      - PORT=3001
     depends_on:
       mongo:
         condition: service_healthy
-    networks:
-      - spotfoot-network
-
-networks:
-  spotfoot-network:
-    name: spotfoot-prod-network
 
 volumes:
   mongo_data:
