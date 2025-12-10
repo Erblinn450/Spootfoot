@@ -90,21 +90,21 @@ jobs:
     - name: Checkout du code
       uses: actions/checkout@v3
 
-    - name: Login to GHCR
+    - name: Connexion au registre GHCR
       uses: docker/login-action@v2
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Deploy application
+    - name: Déploiement de l'application
       run: |
-        # Création du dossier infra s'il n'existe pas
-        mkdir -p infra
-
-        # Copie du fichier local (depuis le checkout) vers l'emplacement d'exécution
-        # Note: Le runner a fait un checkout dans un dossier de travail, on peut utiliser 
-        # le docker-compose.prod.yml directement depuis là.
+        echo "🔍 Début du diagnostic..."
+        pwd
+        ls -la
+        ls -la infra/
+        docker --version
+        docker compose version || echo "⚠️ Docker Compose V2 non détecté, essai V1..."
         
         # Définition des variables d'environnement pour Docker Compose
         export JWT_SECRET="${{ secrets.JWT_SECRET }}"
@@ -112,6 +112,8 @@ jobs:
         export ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}"
         export GITHUB_REPOSITORY="${{ github.repository }}"
 
+        echo "🚀 Lancement de Docker Compose..."
+        
         # Pull & Up
         docker compose -f infra/docker-compose.prod.yml pull
         docker compose -f infra/docker-compose.prod.yml up -d --remove-orphans
