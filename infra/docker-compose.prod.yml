@@ -13,6 +13,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - spotfoot-network
 
   api:
     image: ghcr.io/erblinn450/spootfoot/spotfoot-backend:latest
@@ -28,6 +30,12 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
+    networks:
+      - spotfoot-network
+
+networks:
+  spotfoot-network:
+    name: spotfoot-prod-network
 
 volumes:
   mongo_data:
