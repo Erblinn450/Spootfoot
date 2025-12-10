@@ -15,7 +15,7 @@ services:
       retries: 5
 
   api:
-    image: ghcr.io/${GITHUB_REPOSITORY:-erblinn450/spootfoot}/spotfoot-backend:latest
+    image: ghcr.io/erblinn450/spootfoot/spotfoot-backend:latest
     container_name: spotfoot-api
     restart: unless-stopped
     env_file:

@@ -8,7 +8,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/spotfoot-backend
+  IMAGE_NAME: erblinn450/spootfoot/spotfoot-backend
 
 jobs:
   # Job 1: Build et Test du Backend
