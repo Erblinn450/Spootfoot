@@ -1,16 +1,21 @@
 name: CI/CD Pipeline - Spootfoot
 
-# Déclencheur : à chaque push sur la branche main
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/spotfoot-backend
+
 jobs:
   # Job 1: Build et Test du Backend
   backend-tests:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     
     steps:
     - name: Checkout du code
@@ -19,14 +24,14 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: '18'
+        node-version: '20'
         cache: 'npm'
         cache-dependency-path: backend/package-lock.json
     
     - name: Installation des dépendances Backend
       run: |
         cd backend
-        npm install
+        npm ci
     
     - name: Lancement des tests Backend
       run: |
@@ -35,67 +40,95 @@ jobs:
       env:
         NODE_ENV: test
 
-  # Job 2: Build du Frontend Mobile
-  frontend-build:
+  # Job 2: Build & Push Docker Image
+  docker-build:
+    needs: backend-tests
     runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout du code
-      uses: actions/checkout@v3
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: mobile/package.json
-    
-    - name: Installation des dépendances Frontend
-      run: |
-        cd mobile
-        npm install
-    
-    - name: Vérification de la compilation
-      run: |
-        cd mobile
-        echo "✅ Frontend dependencies installed successfully"
-        echo "Note: Build web sera configuré plus tard"
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
 
-  # Job 3: Déploiement (seulement si les tests passent)
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=,format=short
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: prod
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  # Job 3: Déploiement sur le serveur (Self-Hosted)
   deploy:
-    needs: [backend-tests, frontend-build]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    needs: docker-build
+    runs-on: self-hosted
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     
     steps:
     - name: Checkout du code
       uses: actions/checkout@v3
-    
+
+    - name: Login to GHCR
+      uses: docker/login-action@v2
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Deploy application
+      run: |
+        # Création du dossier infra s'il n'existe pas
+        mkdir -p infra
+
+        # Copie du fichier local (depuis le checkout) vers l'emplacement d'exécution
+        # Note: Le runner a fait un checkout dans un dossier de travail, on peut utiliser 
+        # le docker-compose.prod.yml directement depuis là.
+        
+        # Définition des variables d'environnement pour Docker Compose
+        export JWT_SECRET="${{ secrets.JWT_SECRET }}"
+        export MONGO_INITDB_ROOT_PASSWORD="${{ secrets.MONGO_INITDB_ROOT_PASSWORD }}"
+        export ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}"
+        export GITHUB_REPOSITORY="${{ github.repository }}"
+
+        # Pull & Up
+        docker compose -f infra/docker-compose.prod.yml pull
+        docker compose -f infra/docker-compose.prod.yml up -d --remove-orphans
+        docker system prune -f
+
+  # Job 4: Build du Frontend Mobile (Check only)
+  frontend-check:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout du code
+      uses: actions/checkout@v3
     - name: Setup Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: '18'
+        node-version: '20'
         cache: 'npm'
         cache-dependency-path: mobile/package.json
-    
-    - name: Préparation du déploiement
+    - name: Installation Deps Mobile
       run: |
-        echo "🚀 Déploiement prêt !"
-        echo "Backend tests: ✅ Passés"
-        echo "Frontend build: ✅ Vérifié"
-        echo "Note: Déploiement Netlify sera configuré prochainement"
-
-  # Job 4: Notification de succès
-  notify:
-    needs: [deploy]
-    runs-on: ubuntu-latest
-    if: always()
-    
-    steps:
-    - name: Notification de déploiement
-      run: |
-        if [ "${{ needs.deploy.result }}" == "success" ]; then
-          echo "✅ Déploiement réussi ! App disponible sur Netlify"
-        else
-          echo "❌ Échec du déploiement"
-        fi
+        cd mobile
+        npm ci

@@ -1,0 +1,35 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: spotfoot-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: ghcr.io/${GITHUB_REPOSITORY:-erblinn450/spootfoot}/spotfoot-backend:latest
+    container_name: spotfoot-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://root:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017/spotfoot?authSource=admin
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+    ports:
+      - "${API_PORT:-3001}:3001"
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+volumes:
+  mongo_data:
