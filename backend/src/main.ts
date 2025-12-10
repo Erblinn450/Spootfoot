@@ -13,23 +13,12 @@ async function bootstrap() {
   app.use(helmet());
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
 
-  // Autoriser les appels depuis le front (Web/Expo)
+  // Autoriser les appels depuis n'importe où (pour le déploiement local)
   app.enableCors({
-    origin: [
-      'http://localhost:8080',
-      'http://localhost:8081',
-      'http://localhost:8082',
-      'http://localhost:8083',
-      'http://localhost:8084',
-      'http://127.0.0.1:8080',
-      'http://127.0.0.1:8081',
-      'http://127.0.0.1:8082',
-      'http://127.0.0.1:8083',
-      'http://127.0.0.1:8084',
-    ],
+    origin: true, // Autorise tout le monde (ou mettre '*' si credentials: false)
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-token'],
-    credentials: false,
+    credentials: true,
   });
 
   const config = new DocumentBuilder()
@@ -40,6 +29,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api-docs', app, document, { useGlobalPrefix: true });
 
-  await app.listen(process.env.PORT ? Number(process.env.PORT) : 3001);
+  // Écouter sur toutes les interfaces (0.0.0.0) pour être accessible en mode host
+  await app.listen(process.env.PORT ? Number(process.env.PORT) : 3001, '0.0.0.0');
 }
 void bootstrap();
