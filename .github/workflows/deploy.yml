@@ -1,4 +1,4 @@
-name: CI/CD Pipeline - Spootfoot
+name: CI/CD - Spootfoot
 
 on:
   push:
@@ -11,37 +11,22 @@ env:
   IMAGE_NAME: erblinn450/spootfoot/spotfoot-backend
 
 jobs:
-  # Job 1: Build et Test du Backend
   backend-tests:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    
     steps:
-    - name: Checkout du code
-      uses: actions/checkout@v3
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
+    - uses: actions/checkout@v3
+    - uses: actions/setup-node@v3
       with:
         node-version: '20'
         cache: 'npm'
         cache-dependency-path: backend/package-lock.json
-    
-    - name: Installation des dépendances Backend
-      run: |
-        cd backend
-        npm ci
-    
-    - name: Lancement des tests Backend
-      run: |
-        cd backend
-        echo "⚠️ Skipping tests (Connection to localhost:3001 failed in CI)"
-        # npm test
+    - run: cd backend && npm ci
+    - run: cd backend && echo "⚠️ Tests skipped"
       env:
         NODE_ENV: test
 
-  # Job 2: Build & Push Docker Image
   docker-build:
     needs: backend-tests
     runs-on: ubuntu-latest
@@ -49,29 +34,21 @@ jobs:
     permissions:
       contents: read
       packages: write
-
     steps:
-      - name: Checkout du code
-        uses: actions/checkout@v3
-
-      - name: Log in to the Container registry
-        uses: docker/login-action@v2
+      - uses: actions/checkout@v3
+      - uses: docker/login-action@v2
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
+      - id: meta
         uses: docker/metadata-action@v4
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest
             type=sha,prefix=,format=short
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v4
+      - uses: docker/build-push-action@v4
         with:
           context: ./backend
           file: ./backend/Dockerfile
@@ -80,65 +57,36 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-  # Job 3: Déploiement sur le serveur (Self-Hosted)
   deploy:
     needs: docker-build
     runs-on: self-hosted
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    
     steps:
-    - name: Checkout du code
-      uses: actions/checkout@v3
-
-    - name: Connexion au registre GHCR
-      uses: docker/login-action@v2
+    - uses: actions/checkout@v3
+    - uses: docker/login-action@v2
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Déploiement de l'application
-      run: |
-        echo "🔍 Début du diagnostic..."
-        pwd
-        ls -la
-        ls -la infra/
-        docker --version
-        docker compose version || echo "⚠️ Docker Compose V2 non détecté, essai V1..."
-        
-        # Définition des variables d'environnement pour Docker Compose
+    - run: |
         export JWT_SECRET="${{ secrets.JWT_SECRET }}"
         export MONGO_INITDB_ROOT_PASSWORD="${{ secrets.MONGO_INITDB_ROOT_PASSWORD }}"
         export ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}"
         export GITHUB_REPOSITORY="${{ github.repository }}"
-
-        # VÉRIFICATION CRITIQUE DES SECRETS
-        if [ -z "$MONGO_INITDB_ROOT_PASSWORD" ]; then
-          echo "🔴 ERREUR CRITIQUE: Le secret GitHub 'MONGO_INITDB_ROOT_PASSWORD' est vide ou n'existe pas !"
-          echo "👉 Allez dans Settings > Secrets and variables > Actions et ajoutez-le."
-          exit 1
-        fi
-
-        echo "🚀 Lancement de Docker Compose..."
         
-        # Pull & Up
+        [ -z "$MONGO_INITDB_ROOT_PASSWORD" ] && echo "🔴 Secret MONGO_INITDB_ROOT_PASSWORD manquant" && exit 1
+        
         docker compose -f infra/docker-compose.prod.yml pull
         docker compose -f infra/docker-compose.prod.yml up -d --remove-orphans
         docker system prune -f
 
-  # Job 4: Build du Frontend Mobile (Check only)
   frontend-check:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout du code
-      uses: actions/checkout@v3
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
+    - uses: actions/checkout@v3
+    - uses: actions/setup-node@v3
       with:
         node-version: '20'
         cache: 'npm'
         cache-dependency-path: mobile/package.json
-    - name: Installation Deps Mobile
-      run: |
-        cd mobile
-        npm ci
+    - run: cd mobile && npm ci
