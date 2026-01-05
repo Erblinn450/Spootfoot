@@ -10,7 +10,9 @@
 
 ## 📖 C'est quoi SpotFoot ?
 
-SpotFoot permet de :
+SpotFoot c'est une app que j'ai créée pour organiser facilement des matchs de foot avec mes potes. Fini les groupes WhatsApp interminables pour savoir qui vient !
+
+L'app permet de :
 - 🏟️ **Réserver un créneau** sur un terrain de foot (1h, 10 places)
 - 🔗 **Partager un lien d'invitation** avec tes potes
 - ✅ **Confirmer sa participation** en un clic ("Je viens" / "Je ne peux pas")
@@ -234,10 +236,20 @@ Ou utilise le compte démo qui est déjà admin : `admin@spotfoot.com` / `admin1
 
 ---
 
-## 📄 Licence
+## 👤 Auteur
 
-MIT © 2024
+Développé par **Omar** — passionné de foot et de code.
+
+L'idée m'est venue après avoir galéré trop de fois à organiser des matchs avec les potes. Entre ceux qui répondent pas, ceux qui annulent au dernier moment... fallait une solution simple et efficace. SpotFoot est né de ce besoin !
+
+N'hésite pas à me contacter si t'as des questions ou des suggestions.
 
 ---
 
-**Made with ⚽ by Erblinn**
+## 📄 Licence
+
+MIT © 2024 Omar
+
+---
+
+*"Le foot, c'est mieux quand tout le monde est là !"* ⚽
