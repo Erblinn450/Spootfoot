@@ -212,7 +212,7 @@ export default function SlotsList() {
       
       <Header 
         title="SpotFoot" 
-        subtitle="Réservez vos créneaux"
+        subtitle="by Omar • Réservez vos créneaux"
         icon="⚽"
         rightElement={
           <TouchableOpacity
