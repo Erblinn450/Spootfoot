@@ -7,13 +7,22 @@ import type { RootStackParamList } from '../navigation/types';
 import { colors, spacing, radius, font, shadow } from '../theme';
 import { Header, Card, Badge, Stat, EmptyState, Button, AnimatedEntry } from '../components/UI';
 
-type Slot = { _id: string; startAt: string; status: 'OPEN' | 'RESERVED' | 'FULL'; terrainId?: string };
+type Slot = { 
+  _id: string; 
+  startAt: string; 
+  status: 'OPEN' | 'RESERVED' | 'FULL'; 
+  terrainId?: string;
+  durationMin?: number;
+  capacity?: number;
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SLOT CARD
 // ═══════════════════════════════════════════════════════════════════════════
 
-function SlotCard({ item, index, onPress }: { item: Slot; index: number; onPress: () => void }) {
+function SlotCard({ item, index, onPress }: { item: Slot; index: number; onPress: () => void; }) {
+  const duration = item.durationMin ?? 60;
+  const capacity = item.capacity ?? 10;
   const opacity = React.useRef(new Animated.Value(0)).current;
   const translateX = React.useRef(new Animated.Value(-30)).current;
   const scale = React.useRef(new Animated.Value(1)).current;
@@ -116,7 +125,7 @@ function SlotCard({ item, index, onPress }: { item: Slot; index: number; onPress
                     {timeStr}
                   </Text>
                   <Text style={{ color: colors.textMuted, fontSize: font.sm, marginTop: spacing['1'] }}>
-                    1h • 10 places
+                    {duration >= 60 ? `${Math.floor(duration/60)}h${duration%60 || ''}` : `${duration}min`} • {capacity} places
                   </Text>
                 </View>
                 <Badge variant={statusConfig.variant} icon={statusConfig.icon}>

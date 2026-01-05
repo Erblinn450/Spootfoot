@@ -246,7 +246,7 @@ export default function Reservations() {
             icon="🎫"
             title="Aucune réservation"
             description="Vous n'avez pas encore de réservation. Réservez votre premier créneau !"
-            action={{ label: 'Voir les créneaux', onPress: () => navigation.navigate('Terrains') }}
+            action={{ label: 'Voir les créneaux', onPress: () => navigation.navigate('Créneaux') }}
           />
         )}
 
