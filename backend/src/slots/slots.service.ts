@@ -9,7 +9,9 @@ export class SlotsService {
 
   async create(data: { terrainId: string; startAt: string | Date; durationMin?: number; capacity?: number }) {
     const start = new Date(data.startAt);
-    console.log('[SlotsService] Creating slot:', { terrainId: data.terrainId, startAt: data.startAt, parsed: start, now: new Date() });
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[SlotsService] Creating slot:', { terrainId: data.terrainId, startAt: data.startAt, parsed: start, now: new Date() });
+    }
     
     if (isNaN(start.getTime())) {
       throw new BadRequestException('Invalid date format for startAt');
@@ -25,7 +27,12 @@ export class SlotsService {
   }
 
   async listPublic(filter?: { terrainId?: string; from?: Date; limit?: number }) {
-    const query: any = { status: { $in: ['OPEN', 'RESERVED', 'FULL'] } };
+    const query: { 
+      status: { $in: string[] }; 
+      terrainId?: string; 
+      startAt?: { $gte: Date } 
+    } = { status: { $in: ['OPEN', 'RESERVED', 'FULL'] } };
+    
     if (filter?.terrainId) query.terrainId = filter.terrainId;
     if (filter?.from) query.startAt = { $gte: filter.from };
 

@@ -11,6 +11,7 @@ env:
   IMAGE_NAME: erblinn450/spootfoot/spotfoot-backend
 
 jobs:
+  # Vérification et compilation du backend
   backend-tests:
     runs-on: ubuntu-latest
     permissions:
@@ -20,15 +21,16 @@ jobs:
     - uses: actions/setup-node@v3
       with:
         node-version: '20'
-        cache: 'npm'
+        cache: 'npm'  # Cache des dépendances pour accélérer
         cache-dependency-path: backend/package-lock.json
     - run: cd backend && npm ci
     - run: cd backend && echo "⚠️ Tests skipped"
       env:
         NODE_ENV: test
 
+  # Construction et push de l'image Docker sur GHCR
   docker-build:
-    needs: backend-tests
+    needs: backend-tests  # Attend la fin des tests avant de build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
@@ -47,19 +49,20 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest
-            type=sha,prefix=,format=short
+            type=sha,prefix=,format=short  # Tag avec le hash du commit
       - uses: docker/build-push-action@v4
         with:
           context: ./backend
           file: ./backend/Dockerfile
-          target: prod
+          target: prod  # Build uniquement la target production
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
+  # Déploiement automatique sur serveur local (Self-Hosted Runner)
   deploy:
-    needs: docker-build
-    runs-on: self-hosted
+    needs: docker-build  # Attend que l'image soit disponible
+    runs-on: self-hosted  # Exécution sur le serveur local, pas sur GitHu
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
     - uses: actions/checkout@v3
@@ -69,6 +72,7 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     - run: |
+        # Injection des secrets en mémoire (jamais écrits sur disque)
         export JWT_SECRET="${{ secrets.JWT_SECRET }}"
         export MONGO_INITDB_ROOT_PASSWORD="${{ secrets.MONGO_INITDB_ROOT_PASSWORD }}"
         export ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}"
@@ -76,10 +80,12 @@ jobs:
         
         [ -z "$MONGO_INITDB_ROOT_PASSWORD" ] && echo "🔴 Secret MONGO_INITDB_ROOT_PASSWORD manquant" && exit 1
         
+        # Déploiement via Docker Composee
         docker compose -f infra/docker-compose.prod.yml pull
         docker compose -f infra/docker-compose.prod.yml up -d --remove-orphans
-        docker system prune -f
+        docker system prune -f  # Nettoyage des ressources inutiliséese
 
+  # Vérification du code mobile (non-bloquant, en parallèle)
   frontend-check:
     runs-on: ubuntu-latest
     steps:

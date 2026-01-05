@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, Text, TextInput, Alert, TouchableOpacity } from 'react-native';
-import { colors, spacing, radius, shadows } from '../theme';
-import PrimaryButton from '../components/PrimaryButton';
+import { View, Text, KeyboardAvoidingView, Platform, ScrollView, Animated, Dimensions } from 'react-native';
+import { colors, spacing, radius, font, shadow } from '../theme';
+import { Button, Input, Divider, AnimatedEntry } from '../components/UI';
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '../state/UserContext';
 import { BASE_URL } from '../config';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const { width } = Dimensions.get('window');
 
 export default function Login() {
   const navigation = useNavigation<any>();
@@ -14,13 +15,25 @@ export default function Login() {
   const [loading, setLoading] = React.useState(false);
   const { user, setAuth } = useUser();
   const [error, setError] = React.useState<string | null>(null);
+  const [mode, setMode] = React.useState<'login' | 'signup'>('login');
+
+  // Animation du logo
+  const logoScale = React.useRef(new Animated.Value(0.8)).current;
+  const logoRotate = React.useRef(new Animated.Value(0)).current;
+  
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.spring(logoScale, { toValue: 1, friction: 4, useNativeDriver: true }),
+      Animated.timing(logoRotate, { toValue: 1, duration: 800, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
   const isValidEmail = React.useMemo(() => /.+@.+\..+/.test(email.trim()), [email]);
   const isValidForm = isValidEmail && password.length >= 6;
 
-  const onAuth = async (mode: 'login' | 'signup') => {
+  const onAuth = async () => {
     if (!isValidForm) {
-      setError('Veuillez entrer un email valide et un mot de passe (≥ 6 caractères)');
+      setError('Email valide et mot de passe (min. 6 caractères) requis');
       return;
     }
     setLoading(true);
@@ -38,179 +51,210 @@ export default function Login() {
       navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
     } catch (e: any) {
       setError(e?.message ?? 'Erreur réseau');
-      Alert.alert('Connexion', e?.message ?? 'Erreur réseau');
     } finally {
       setLoading(false);
     }
   };
 
-  // Si déjà connecté, sauter l'écran Login
   React.useEffect(() => {
     if (user.accessToken) {
       navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
     }
   }, [user.accessToken, navigation]);
 
+  const spin = logoRotate.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Header avec fond vert */}
-      <View style={{ 
-        backgroundColor: colors.primary, 
-        paddingTop: spacing.xxl * 2,
-        paddingBottom: spacing.xxl,
-        paddingHorizontal: spacing.xl,
-        borderBottomLeftRadius: radius.xl * 2,
-        borderBottomRightRadius: radius.xl * 2,
-        ...shadows.xl,
-      }}>
-        <Text style={{ fontSize: 36, fontWeight: '800', color: 'white', textAlign: 'center', marginBottom: spacing.xs }}>
-          ⚽ SpotFoot
-        </Text>
-        <Text style={{ fontSize: 16, color: 'rgba(255,255,255,0.9)', textAlign: 'center' }}>
-          Réservez vos terrains facilement
-        </Text>
-      </View>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      {/* Background gradient effect */}
+      <View style={{
+        position: 'absolute',
+        top: -100,
+        left: -100,
+        width: 400,
+        height: 400,
+        borderRadius: 200,
+        backgroundColor: colors.brandGlow,
+        opacity: 0.3,
+      }} />
+      <View style={{
+        position: 'absolute',
+        bottom: -150,
+        right: -150,
+        width: 500,
+        height: 500,
+        borderRadius: 250,
+        backgroundColor: colors.limeGlow,
+        opacity: 0.2,
+      }} />
 
-      {/* Formulaire dans une carte */}
-      <View style={{ 
-        marginHorizontal: spacing.xl, 
-        marginTop: -spacing.xxl,
-        backgroundColor: colors.card,
-        borderRadius: radius.xl,
-        padding: spacing.xl,
-        ...shadows.lg,
-      }}>
-        <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: spacing.lg, textAlign: 'center' }}>
-          Connexion
-        </Text>
-
-        <Text style={{ marginBottom: spacing.xs, color: colors.text, fontWeight: '600', fontSize: 14 }}>Email</Text>
-        <TextInput
-          value={email}
-          onChangeText={(t) => {
-            setEmail(t);
-            if (error) setError(null);
-          }}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          placeholder="vous@exemple.com"
-          style={{
-            borderWidth: 2,
-            borderRadius: radius.lg,
-            padding: spacing.md,
-            marginBottom: spacing.lg,
-            borderColor: error ? colors.danger : colors.border,
-            backgroundColor: colors.background,
-            fontSize: 15,
-          }}
-          returnKeyType="next"
-        />
-
-        <Text style={{ marginBottom: spacing.xs, color: colors.text, fontWeight: '600', fontSize: 14 }}>Mot de passe</Text>
-        <TextInput
-          value={password}
-          onChangeText={(t) => {
-            setPassword(t);
-            if (error) setError(null);
-          }}
-          secureTextEntry
-          placeholder="••••••"
-          style={{
-            borderWidth: 2,
-            borderRadius: radius.lg,
-            padding: spacing.md,
-            marginBottom: spacing.lg,
-            borderColor: error ? colors.danger : colors.border,
-            backgroundColor: colors.background,
-            fontSize: 15,
-          }}
-          returnKeyType="done"
-          onSubmitEditing={() => onAuth('login')}
-        />
-
-        {error && (
-          <View style={{ 
-            backgroundColor: '#FEE2E2', 
-            padding: spacing.md, 
-            borderRadius: radius.md, 
-            marginBottom: spacing.lg,
-            borderLeftWidth: 4,
-            borderLeftColor: colors.danger,
-          }}>
-            <Text style={{ color: colors.danger, fontWeight: '600' }}>❌ {error}</Text>
-          </View>
-        )}
-
-        <View style={{ flexDirection: 'row', gap: spacing.md }}>
-          <TouchableOpacity
-            style={{
-              flex: 1,
-              backgroundColor: colors.backgroundDark,
-              padding: spacing.md,
-              borderRadius: radius.lg,
-              alignItems: 'center',
-              opacity: !isValidForm || loading ? 0.5 : 1,
-            }}
-            onPress={() => onAuth('signup')}
-            disabled={!isValidForm || loading}
-          >
-            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>
-              {loading ? '⏳' : "S'inscrire"}
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={{
-              flex: 1,
-              backgroundColor: colors.primary,
-              padding: spacing.md,
-              borderRadius: radius.lg,
-              alignItems: 'center',
-              ...shadows.md,
-              opacity: !isValidForm || loading ? 0.5 : 1,
-            }}
-            onPress={() => onAuth('login')}
-            disabled={!isValidForm || loading}
-          >
-            <Text style={{ color: 'white', fontWeight: '700', fontSize: 15 }}>
-              {loading ? '⏳' : 'Se connecter'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <Text style={{ color: colors.textMuted, marginTop: spacing.lg, fontSize: 12, textAlign: 'center', lineHeight: 18 }}>
-          💡 Astuce : utilisez admin@example.com pour accéder à l'interface admin
-        </Text>
-      </View>
-
-      {/* Debug button */}
-      <TouchableOpacity
-        style={{
-          marginHorizontal: spacing.xl,
-          marginTop: spacing.xl,
-          padding: spacing.md,
-          backgroundColor: colors.card,
-          borderRadius: radius.lg,
-          alignItems: 'center',
-          borderWidth: 1,
-          borderColor: colors.border,
-          ...shadows.sm,
-        }}
-        onPress={async () => {
-          try {
-            await AsyncStorage.clear();
-            window.alert('✅ Cache vidé ! Vous pouvez vous reconnecter.');
-            setEmail('admin@example.com');
-            setPassword('secret123');
-          } catch (e) {
-            window.alert('❌ Impossible de vider le cache');
-          }
-        }}
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '600' }}>
-          🔧 Vider le cache (Debug)
-        </Text>
-      </TouchableOpacity>
+        <ScrollView 
+          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: spacing['6'] }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Logo + Title */}
+          <AnimatedEntry delay={0}>
+            <View style={{ alignItems: 'center', marginBottom: spacing['10'] }}>
+              <Animated.View style={{
+                transform: [{ scale: logoScale }, { rotate: spin }],
+                marginBottom: spacing['5'],
+              }}>
+                <View style={{
+                  width: 100,
+                  height: 100,
+                  borderRadius: radius['2xl'],
+                  backgroundColor: colors.bgCard,
+                  borderWidth: 2,
+                  borderColor: colors.brand,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  ...shadow.glow,
+                }}>
+                  <Text style={{ fontSize: 48 }}>⚽</Text>
+                </View>
+              </Animated.View>
+              
+              <Text style={{ 
+                color: colors.textPrimary, 
+                fontSize: font['4xl'], 
+                fontWeight: font.black,
+                letterSpacing: -1,
+              }}>
+                SpotFoot
+              </Text>
+              <Text style={{ 
+                color: colors.textMuted, 
+                fontSize: font.base,
+                marginTop: spacing['2'],
+              }}>
+                Réservez vos terrains
+              </Text>
+            </View>
+          </AnimatedEntry>
+
+          {/* Mode Toggle */}
+          <AnimatedEntry delay={100}>
+            <View style={{
+              flexDirection: 'row',
+              backgroundColor: colors.bgCard,
+              borderRadius: radius.lg,
+              padding: spacing['1'],
+              marginBottom: spacing['6'],
+              borderWidth: 1,
+              borderColor: colors.border,
+            }}>
+              {(['login', 'signup'] as const).map((m) => (
+                <View key={m} style={{ flex: 1 }}>
+                  <Button
+                    onPress={() => { setMode(m); setError(null); }}
+                    variant={mode === m ? 'primary' : 'ghost'}
+                    size="md"
+                  >
+                    {m === 'login' ? 'Connexion' : 'Inscription'}
+                  </Button>
+                </View>
+              ))}
+            </View>
+          </AnimatedEntry>
+
+          {/* Form */}
+          <AnimatedEntry delay={200}>
+            <Input
+              value={email}
+              onChangeText={(t) => { setEmail(t); if (error) setError(null); }}
+              label="Email"
+              icon="📧"
+              placeholder="vous@exemple.com"
+              keyboardType="email-address"
+              error={error && !isValidEmail ? 'Email invalide' : undefined}
+            />
+          </AnimatedEntry>
+
+          <AnimatedEntry delay={300}>
+            <Input
+              value={password}
+              onChangeText={(t) => { setPassword(t); if (error) setError(null); }}
+              label="Mot de passe"
+              icon="🔒"
+              placeholder="••••••••"
+              secureTextEntry
+              error={error && password.length < 6 ? 'Minimum 6 caractères' : undefined}
+            />
+          </AnimatedEntry>
+
+          {/* Error */}
+          {error && (
+            <AnimatedEntry delay={0}>
+              <View style={{
+                backgroundColor: colors.errorMuted,
+                padding: spacing['4'],
+                borderRadius: radius.lg,
+                marginBottom: spacing['4'],
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing['3'],
+              }}>
+                <Text style={{ fontSize: font.lg }}>⚠️</Text>
+                <Text style={{ color: colors.error, fontSize: font.sm, fontWeight: font.medium, flex: 1 }}>
+                  {error}
+                </Text>
+              </View>
+            </AnimatedEntry>
+          )}
+
+          {/* Submit Button */}
+          <AnimatedEntry delay={400}>
+            <Button 
+              onPress={onAuth} 
+              disabled={!isValidForm}
+              loading={loading}
+              icon={mode === 'login' ? '🚀' : '✨'}
+              size="lg"
+            >
+              {mode === 'login' ? 'Se connecter' : 'Créer mon compte'}
+            </Button>
+          </AnimatedEntry>
+
+          <Divider label="OU" />
+
+          {/* Demo Button */}
+          <AnimatedEntry delay={500}>
+            <Button 
+              onPress={() => {
+                setEmail('admin@spotfoot.com');
+                setPassword('admin123');
+              }}
+              variant="secondary"
+              icon="🎮"
+            >
+              Utiliser le compte démo
+            </Button>
+          </AnimatedEntry>
+
+          {/* Footer */}
+          <AnimatedEntry delay={600}>
+            <Text style={{ 
+              color: colors.textMuted, 
+              fontSize: font.xs, 
+              textAlign: 'center',
+              marginTop: spacing['8'],
+              lineHeight: 18,
+            }}>
+              En continuant, vous acceptez nos{'\n'}
+              <Text style={{ color: colors.brand }}>Conditions</Text>
+              {' '}et{' '}
+              <Text style={{ color: colors.brand }}>Politique de confidentialité</Text>
+            </Text>
+          </AnimatedEntry>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }

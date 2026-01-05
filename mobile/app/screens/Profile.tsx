@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
-import { colors, spacing, radius, shadows } from '../theme';
-import PrimaryButton from '../components/PrimaryButton';
+import { colors, spacing, radius, font, shadow } from '../theme';
+import { Header, Card, Badge, Button, AnimatedEntry, Divider } from '../components/UI';
 import { useUser } from '../state/UserContext';
 import { useNavigation } from '@react-navigation/native';
 
@@ -10,151 +10,180 @@ export default function Profile() {
   const navigation = useNavigation<any>();
 
   const handleLogout = () => {
-    // Réinitialise complètement la session (email, roles, accessToken, caches)
     void (async () => {
       await doLogout();
       navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
     })();
   };
 
+  const initials = user.email ? user.email.substring(0, 2).toUpperCase() : '??';
+
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Header moderne */}
-      <View style={{ 
-        backgroundColor: colors.primary, 
-        paddingTop: spacing.xl,
-        paddingBottom: spacing.xl,
-        paddingHorizontal: spacing.xl,
-        borderBottomLeftRadius: radius.xl,
-        borderBottomRightRadius: radius.xl,
-        ...shadows.lg,
-      }}>
-        <View style={{ alignItems: 'center', marginBottom: spacing.md }}>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }}>
+      {/* Gradient blobs */}
+      <View style={{
+        position: 'absolute', top: -100, right: -100, width: 300, height: 300,
+        borderRadius: 150, backgroundColor: colors.brandGlow, opacity: 0.15,
+      }} />
+      <View style={{
+        position: 'absolute', bottom: 100, left: -150, width: 400, height: 400,
+        borderRadius: 200, backgroundColor: colors.limeGlow, opacity: 0.1,
+      }} />
+
+      {/* Avatar Section */}
+      <AnimatedEntry delay={0}>
+        <View style={{ alignItems: 'center', paddingTop: spacing['16'], paddingBottom: spacing['6'] }}>
           <View style={{
-            width: 80,
-            height: 80,
-            borderRadius: 40,
-            backgroundColor: 'white',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: spacing.md,
-            ...shadows.md,
+            width: 100, height: 100, borderRadius: radius['2xl'],
+            backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center',
+            marginBottom: spacing['4'], ...shadow.glow,
           }}>
-            <Text style={{ fontSize: 36 }}>👤</Text>
+            <Text style={{ color: colors.gray950, fontSize: font['3xl'], fontWeight: font.black }}>
+              {initials}
+            </Text>
           </View>
-          <Text style={{ fontSize: 24, fontWeight: '800', color: 'white', marginBottom: spacing.xs }}>
+          
+          {isAdmin && (
+            <Badge variant="lime" icon="👑">
+              ADMINISTRATEUR
+            </Badge>
+          )}
+          
+          <Text style={{ 
+            color: colors.textPrimary, fontSize: font['2xl'], fontWeight: font.black,
+            marginTop: spacing['3'],
+          }}>
             Mon Profil
           </Text>
-          <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.9)' }}>
+          <Text style={{ color: colors.textMuted, fontSize: font.base, marginTop: spacing['1'] }}>
             {user.email ?? 'Utilisateur'}
           </Text>
         </View>
-      </View>
+      </AnimatedEntry>
 
-      <View style={{ flex: 1, padding: spacing.xl }}>
-        {/* Carte informations */}
-        <View
-          style={{
-            backgroundColor: colors.card,
-            borderRadius: radius.xl,
-            padding: spacing.xl,
-            marginBottom: spacing.lg,
-            ...shadows.md,
-          }}
-        >
-          <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: spacing.lg }}>
-            📧 Informations
-          </Text>
+      <View style={{ paddingHorizontal: spacing['5'] }}>
+        {/* Email Card */}
+        <AnimatedEntry delay={100}>
+          <Card style={{ marginBottom: spacing['4'] }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing['4'] }}>
+              <View style={{
+                width: 44, height: 44, borderRadius: radius.lg, backgroundColor: colors.brandMuted,
+                alignItems: 'center', justifyContent: 'center', marginRight: spacing['4'],
+              }}>
+                <Text style={{ fontSize: 20 }}>📧</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.textPrimary, fontSize: font.lg, fontWeight: font.bold }}>
+                  Adresse email
+                </Text>
+                <Text style={{ color: colors.textMuted, fontSize: font.sm }}>
+                  Votre identifiant
+                </Text>
+              </View>
+            </View>
+            
+            <View style={{
+              backgroundColor: colors.bgInput, padding: spacing['4'], borderRadius: radius.lg,
+              borderWidth: 1, borderColor: colors.border,
+            }}>
+              <Text style={{ color: colors.textPrimary, fontSize: font.base, fontWeight: font.semibold }}>
+                {user.email ?? 'non renseigné'}
+              </Text>
+            </View>
+          </Card>
+        </AnimatedEntry>
 
-          <View style={{ 
-            backgroundColor: colors.backgroundDark, 
-            padding: spacing.md, 
-            borderRadius: radius.md,
-            marginBottom: spacing.md,
-          }}>
-            <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600', marginBottom: spacing.xs }}>
-              Adresse email
-            </Text>
-            <Text style={{ color: colors.text, fontWeight: '600', fontSize: 15 }}>
-              {user.email ?? 'non renseigné'}
-            </Text>
-          </View>
-
-          <View style={{ 
-            backgroundColor: colors.backgroundDark, 
-            padding: spacing.md, 
-            borderRadius: radius.md,
-          }}>
-            <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600', marginBottom: spacing.xs }}>
-              Rôles
-            </Text>
-            <View style={{ flexDirection: 'row', gap: spacing.xs, flexWrap: 'wrap' }}>
+        {/* Roles Card */}
+        <AnimatedEntry delay={200}>
+          <Card style={{ marginBottom: spacing['4'] }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing['4'] }}>
+              <View style={{
+                width: 44, height: 44, borderRadius: radius.lg, backgroundColor: colors.limeMuted,
+                alignItems: 'center', justifyContent: 'center', marginRight: spacing['4'],
+              }}>
+                <Text style={{ fontSize: 20 }}>🛡️</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.textPrimary, fontSize: font.lg, fontWeight: font.bold }}>
+                  Permissions
+                </Text>
+                <Text style={{ color: colors.textMuted, fontSize: font.sm }}>
+                  Vos rôles
+                </Text>
+              </View>
+            </View>
+            
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing['2'] }}>
               {user.roles && user.roles.length > 0 ? (
                 user.roles.map((role) => (
-                  <View 
-                    key={role}
-                    style={{ 
-                      backgroundColor: role === 'admin' ? colors.primarySoft : colors.backgroundDark,
-                      paddingHorizontal: spacing.md,
-                      paddingVertical: spacing.xs,
-                      borderRadius: radius.pill,
-                      borderWidth: 1,
-                      borderColor: role === 'admin' ? colors.primary : colors.border,
-                    }}
-                  >
-                    <Text style={{ 
-                      color: role === 'admin' ? colors.primary : colors.text, 
-                      fontSize: 13, 
-                      fontWeight: '700' 
-                    }}>
-                      {role === 'admin' ? '👑 Admin' : '👤 User'}
-                    </Text>
-                  </View>
+                  <Badge key={role} variant={role === 'admin' ? 'lime' : 'default'} icon={role === 'admin' ? '👑' : '👤'}>
+                    {role === 'admin' ? 'Administrateur' : 'Utilisateur'}
+                  </Badge>
                 ))
               ) : (
-                <Text style={{ color: colors.textMuted, fontSize: 14 }}>Aucun rôle</Text>
+                <Text style={{ color: colors.textMuted, fontSize: font.sm }}>Aucun rôle</Text>
               )}
             </View>
-          </View>
-        </View>
+          </Card>
+        </AnimatedEntry>
 
-        {/* Statistiques */}
+        {/* Admin Info */}
         {isAdmin && (
-          <View
-            style={{
-              backgroundColor: colors.card,
-              borderRadius: radius.xl,
-              padding: spacing.xl,
-              marginBottom: spacing.lg,
-              borderLeftWidth: 4,
-              borderLeftColor: colors.primary,
-              ...shadows.md,
-            }}
-          >
-            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: spacing.md }}>
-              👑 Accès Admin
-            </Text>
-            <Text style={{ color: colors.textMuted, lineHeight: 20 }}>
-              Vous avez accès à l'interface d'administration pour gérer les terrains et créneaux.
-            </Text>
-          </View>
+          <AnimatedEntry delay={300}>
+            <Card style={{ marginBottom: spacing['4'], borderColor: colors.lime, borderWidth: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing['4'] }}>
+                <Text style={{ fontSize: 28 }}>🎛️</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.textPrimary, fontSize: font.lg, fontWeight: font.bold, marginBottom: spacing['1'] }}>
+                    Accès Administration
+                  </Text>
+                  <Text style={{ color: colors.textMuted, fontSize: font.sm, lineHeight: 20 }}>
+                    Gérez les terrains et créneaux depuis l'onglet Admin.
+                  </Text>
+                </View>
+              </View>
+            </Card>
+          </AnimatedEntry>
         )}
 
-        {/* Bouton déconnexion */}
-        <TouchableOpacity
-          style={{
-            backgroundColor: colors.danger,
-            padding: spacing.lg,
-            borderRadius: radius.xl,
-            alignItems: 'center',
-            ...shadows.md,
-          }}
-          onPress={handleLogout}
-        >
-          <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>
-            🚪 Déconnexion
+        {/* Actions */}
+        <AnimatedEntry delay={400}>
+          <Card onPress={() => window.alert('📧 Contact: support@spotfoot.com')} style={{ marginBottom: spacing['4'] }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{
+                width: 44, height: 44, borderRadius: radius.lg, backgroundColor: colors.bgElevated,
+                alignItems: 'center', justifyContent: 'center', marginRight: spacing['4'],
+              }}>
+                <Text style={{ fontSize: 20 }}>💬</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.textPrimary, fontSize: font.base, fontWeight: font.semibold }}>
+                  Besoin d'aide ?
+                </Text>
+                <Text style={{ color: colors.textMuted, fontSize: font.sm }}>
+                  Contactez notre support
+                </Text>
+              </View>
+              <Text style={{ color: colors.textMuted, fontSize: font.lg }}>→</Text>
+            </View>
+          </Card>
+        </AnimatedEntry>
+
+        <AnimatedEntry delay={500}>
+          <Button onPress={handleLogout} variant="danger" icon="🚪" size="lg">
+            Déconnexion
+          </Button>
+        </AnimatedEntry>
+
+        {/* Version */}
+        <AnimatedEntry delay={600}>
+          <Text style={{ 
+            color: colors.textDisabled, fontSize: font.xs, textAlign: 'center',
+            marginTop: spacing['8'], marginBottom: spacing['10'],
+          }}>
+            SpotFoot v1.0.0 • Made with ⚽
           </Text>
-        </TouchableOpacity>
+        </AnimatedEntry>
       </View>
     </ScrollView>
   );

@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, Alert, TextInput, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, Alert, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { BASE_URL } from '../config';
-import { colors, spacing, radius, shadows } from '../theme';
-import PrimaryButton from '../components/PrimaryButton';
+import { colors, spacing, radius, font, shadow } from '../theme';
+import { Header, Card, Badge, Button, Input, AnimatedEntry, Stat } from '../components/UI';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '../navigation/types';
@@ -11,12 +11,7 @@ import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type InviteInfo = { 
-  slot: { 
-    startAt: string; 
-    durationMin: number;
-    capacity: number; 
-    status: string 
-  }, 
+  slot: { startAt: string; durationMin: number; capacity: number; status: string }, 
   restants: number 
 };
 
@@ -26,21 +21,18 @@ export default function InviteLanding() {
   const initialToken = route.params?.token ?? '';
   const paramInviteUrl = route.params?.inviteUrl;
   const autoAccept = route.params?.autoAccept ?? false;
-  // Token d'invitation saisi par l'utilisateur (ou fourni via navigation)
+  
   const sanitizeToken = React.useCallback((raw: string) => {
     if (!raw) return '';
-    // Si l'utilisateur colle une URL complète, extraire la partie token
-    // Exemples supportés: /invitations/{token}, /invite/{token}, /i/{token}
     const m = raw.match(/\/(?:invitations|invite|i)\/([^/?#]+)/);
-    if (m && m[1]) return m[1];
-    // Sinon, si c'est déjà un token simple, retourner tel quel
-    return raw.trim();
+    return m?.[1] ?? raw.trim();
   }, []);
+
   const [token, setToken] = React.useState(sanitizeToken(initialToken));
   const [info, setInfo] = React.useState<InviteInfo | null>(null);
   const [loading, setLoading] = React.useState(false);
-  const [accepting, setAccepting] = React.useState(false); // État pour éviter double clic
-  const [hasAccepted, setHasAccepted] = React.useState(false); // Marquer si déjà accepté
+  const [accepting, setAccepting] = React.useState(false);
+  const [hasAccepted, setHasAccepted] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
   const { user } = useUser();
@@ -53,8 +45,7 @@ export default function InviteLanding() {
     try {
       const r = await fetch(`${BASE_URL}/invitations/${token}`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = await r.json();
-      setInfo(data);
+      setInfo(await r.json());
     } catch (e: any) {
       setInfo(null);
       setError(e?.message ?? 'Erreur réseau');
@@ -63,49 +54,28 @@ export default function InviteLanding() {
     }
   }, [token]);
 
-  // Vérifier si l'utilisateur a déjà accepté cette invitation
   const checkIfAlreadyAccepted = React.useCallback(async (inviteToken: string) => {
     try {
-      const key = `accepted_${inviteToken}`;
-      console.log('🔍 Vérification acceptation pour:', key);
-      const value = await AsyncStorage.getItem(key);
-      console.log('📦 Valeur AsyncStorage:', value);
-      if (value === 'true') {
-        console.log('✅ Déjà accepté !');
-        setHasAccepted(true);
-      } else {
-        console.log('❌ Pas encore accepté');
-        setHasAccepted(false);
-      }
+      const value = await AsyncStorage.getItem(`accepted_${inviteToken}`);
+      setHasAccepted(value === 'true');
     } catch (e) {
-      console.warn('Erreur vérification acceptation:', e);
+      setHasAccepted(false);
     }
   }, []);
 
-  // Charger automatiquement si un token/URL est fourni par navigation
   React.useEffect(() => {
     const t = sanitizeToken(initialToken || paramInviteUrl || '');
     if (t && t !== token) setToken(t);
-    if (t) {
-      load();
-      // Vérifier si déjà accepté
-      checkIfAlreadyAccepted(t);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (t) { load(); checkIfAlreadyAccepted(t); }
   }, [initialToken, paramInviteUrl]);
 
-  // Vérifier aussi quand le token change
   React.useEffect(() => {
-    if (token) {
-      checkIfAlreadyAccepted(token);
-    }
+    if (token) checkIfAlreadyAccepted(token);
   }, [token, checkIfAlreadyAccepted]);
 
-  // Acceptation de l'invitation
   const accept = async () => {
-    if (!token || accepting || hasAccepted) return; // Empêcher double clic et re-clic après succès
-    
-    setAccepting(true); // Désactiver le bouton
+    if (!token || accepting || hasAccepted) return;
+    setAccepting(true);
     try {
       const r = await fetch(`${BASE_URL}/invitations/${token}/accept`, {
         method: 'POST',
@@ -113,284 +83,222 @@ export default function InviteLanding() {
         body: user.email ? JSON.stringify({ email: user.email }) : undefined,
       });
       if (r.ok) {
-        setHasAccepted(true); // Marquer comme accepté définitivement
-        
-        // Sauvegarder dans AsyncStorage pour persistance
+        setHasAccepted(true);
+        await AsyncStorage.setItem(`accepted_${token}`, 'true');
+        let acceptedCount: number | undefined;
         try {
-          const key = `accepted_${token}`;
-          console.log('💾 Sauvegarde acceptation:', key);
-          await AsyncStorage.setItem(key, 'true');
-          console.log('✅ Acceptation sauvegardée !');
-        } catch (e) {
-          console.warn('❌ Erreur sauvegarde acceptation:', e);
-        }
-        
-        let acceptedCount: number | undefined = undefined;
-        try {
-          // Certaines implémentations peuvent renvoyer 204 No Content
           const text = await r.text();
-          if (text) {
-            const data = JSON.parse(text);
-            acceptedCount = data?.acceptedCount;
-          }
+          if (text) acceptedCount = JSON.parse(text)?.acceptedCount;
         } catch {}
-        const msg = acceptedCount !== undefined
-          ? `Merci, vous êtes inscrit. acceptedCount=${acceptedCount}`
-          : 'Merci, vous êtes inscrit.';
+        const msg = acceptedCount !== undefined ? `Vous êtes inscrit ! (${acceptedCount} participants)` : 'Vous êtes inscrit !';
         setMessage(msg);
-        Alert.alert('Inscription', msg);
-        // Recharger les infos pour mettre à jour "Restants"
+        Alert.alert('✅ Succès', msg);
         await load();
-        // Aller vers l'onglet Réservations pour visualiser immédiatement
-        try {
-          navigation.getParent()?.navigate('Réservations');
-        } catch {}
+        try { navigation.getParent()?.navigate('Réservations'); } catch {}
       } else {
-        // Tenter de récupérer un message d'erreur utile
         let errText = '';
         try { errText = await r.text(); } catch {}
-        const txt = errText || 'Malheureusement, le créneau est plein';
-        setMessage(txt);
-        Alert.alert('Complet', txt);
+        setMessage(errText || 'Le créneau est complet');
+        Alert.alert('❌ Erreur', errText || 'Le créneau est complet');
       }
     } finally {
-      setAccepting(false); // Réactiver le bouton (sauf si hasAccepted est true)
+      setAccepting(false);
     }
   };
 
-  // Si autoAccept est demandé, accepter après chargement des infos
   React.useEffect(() => {
     if (autoAccept && info && !loading && !didAutoAccept.current) {
       didAutoAccept.current = true;
       accept();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoAccept, info, loading]);
 
   const dateObj = info ? new Date(info.slot.startAt) : null;
-  const dateStr = dateObj?.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  const timeStr = dateObj?.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
+  const dayName = dateObj?.toLocaleDateString('fr-FR', { weekday: 'long' });
+  const dayNum = dateObj?.getDate();
+  const month = dateObj?.toLocaleDateString('fr-FR', { month: 'long' });
+  const year = dateObj?.getFullYear();
+  const timeStr = dateObj?.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   const acceptedCount = info ? (info.slot.capacity - info.restants) : 0;
+  const hasSpots = (info?.restants ?? 0) > 0;
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Header */}
-      <View style={{ 
-        backgroundColor: colors.secondary, 
-        paddingTop: spacing.xl,
-        paddingBottom: spacing.xl,
-        paddingHorizontal: spacing.xl,
-        borderBottomLeftRadius: radius.xl,
-        borderBottomRightRadius: radius.xl,
-        ...shadows.lg,
-      }}>
-        <Text style={{ fontSize: 28, fontWeight: '800', color: 'white', marginBottom: spacing.xs }}>
-          👥 Invitation
-        </Text>
-        <Text style={{ fontSize: 15, color: 'rgba(255,255,255,0.9)' }}>
-          Rejoignez le match !
-        </Text>
-      </View>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }}>
+      {/* Gradient blob */}
+      <View style={{
+        position: 'absolute', top: -50, left: -100, width: 350, height: 350,
+        borderRadius: 175, backgroundColor: '#3B82F680', opacity: 0.2,
+      }} />
 
-      <View style={{ padding: spacing.xl }}>
-        {/* Formulaire token */}
-        {!info && (
-          <View
-            style={{
-              backgroundColor: colors.card,
-              borderRadius: radius.xl,
-              padding: spacing.xl,
-              marginBottom: spacing.lg,
-              ...shadows.md,
-            }}
-          >
-            <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: spacing.md }}>
-              🔗 Entrez votre lien
-            </Text>
-            <Text style={{ color: colors.textMuted, fontSize: 14, marginBottom: spacing.md, lineHeight: 20 }}>
-              Collez le lien d'invitation que vous avez reçu
-            </Text>
-            <TextInput
-              value={token}
-              onChangeText={(t) => setToken(sanitizeToken(t))}
-              placeholder="http://localhost:3001/invitations/..."
-              autoCapitalize="none"
-              style={{
-                borderWidth: 2,
-                borderRadius: radius.lg,
-                padding: spacing.md,
-                marginBottom: spacing.md,
-                borderColor: colors.border,
-                backgroundColor: colors.background,
-                fontSize: 14,
-              }}
-            />
-            <TouchableOpacity
-              style={{
-                backgroundColor: loading ? colors.textMuted : colors.secondary,
-                padding: spacing.md,
-                borderRadius: radius.lg,
-                alignItems: 'center',
-                ...shadows.sm,
-              }}
-              onPress={load}
-              disabled={!token || loading}
-            >
-              <Text style={{ color: 'white', fontWeight: '700', fontSize: 15 }}>
-                {loading ? '⏳ Chargement...' : '🔍 Consulter'}
-              </Text>
-            </TouchableOpacity>
-          </View>
+      <Header 
+        title="Invitation" 
+        subtitle="Rejoignez le match !"
+        icon="🎫"
+      />
+
+      <View style={{ paddingHorizontal: spacing['5'] }}>
+        {/* Token Input (if no info) */}
+        {!info && !loading && (
+          <AnimatedEntry delay={0}>
+            <Card style={{ marginBottom: spacing['5'] }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing['4'] }}>
+                <View style={{
+                  width: 44, height: 44, borderRadius: radius.lg, backgroundColor: colors.brandMuted,
+                  alignItems: 'center', justifyContent: 'center', marginRight: spacing['4'],
+                }}>
+                  <Text style={{ fontSize: 20 }}>🔗</Text>
+                </View>
+                <View>
+                  <Text style={{ color: colors.textPrimary, fontSize: font.lg, fontWeight: font.bold }}>
+                    Lien d'invitation
+                  </Text>
+                  <Text style={{ color: colors.textMuted, fontSize: font.sm }}>
+                    Collez le lien reçu
+                  </Text>
+                </View>
+              </View>
+              
+              <Input
+                value={token}
+                onChangeText={(t) => setToken(sanitizeToken(t))}
+                placeholder="http://localhost:3001/invitations/..."
+                icon="🔗"
+              />
+              
+              <Button onPress={load} disabled={!token || loading} icon="🔍" size="lg">
+                Consulter l'invitation
+              </Button>
+            </Card>
+          </AnimatedEntry>
         )}
 
+        {/* Loading */}
+        {loading && (
+          <Card style={{ alignItems: 'center', paddingVertical: spacing['10'] }}>
+            <ActivityIndicator size="large" color={colors.brand} />
+            <Text style={{ color: colors.textMuted, marginTop: spacing['4'], fontWeight: font.medium }}>
+              Chargement...
+            </Text>
+          </Card>
+        )}
+
+        {/* Error */}
         {error && (
-          <View style={{ 
-            backgroundColor: '#FEE2E2', 
-            padding: spacing.md, 
-            borderRadius: radius.lg, 
-            marginBottom: spacing.md,
-            borderLeftWidth: 4,
-            borderLeftColor: colors.danger,
-            ...shadows.sm,
-          }}>
-            <Text style={{ color: colors.danger, fontWeight: '600' }}>❌ {error}</Text>
-          </View>
+          <AnimatedEntry delay={0}>
+            <View style={{
+              backgroundColor: colors.errorMuted, padding: spacing['4'], borderRadius: radius.lg,
+              marginBottom: spacing['4'], flexDirection: 'row', alignItems: 'center', gap: spacing['3'],
+            }}>
+              <Text style={{ fontSize: 20 }}>⚠️</Text>
+              <Text style={{ color: colors.error, fontWeight: font.semibold, flex: 1 }}>{error}</Text>
+            </View>
+          </AnimatedEntry>
         )}
 
-        {message && (
-          <View style={{ 
-            backgroundColor: colors.primarySoft, 
-            padding: spacing.md, 
-            borderRadius: radius.lg, 
-            marginBottom: spacing.md,
-            borderLeftWidth: 4,
-            borderLeftColor: colors.success,
-            ...shadows.sm,
-          }}>
-            <Text style={{ color: colors.success, fontWeight: '600' }}>✅ {message}</Text>
-          </View>
+        {/* Success Message */}
+        {message && !error && (
+          <AnimatedEntry delay={0}>
+            <View style={{
+              backgroundColor: colors.successMuted, padding: spacing['4'], borderRadius: radius.lg,
+              marginBottom: spacing['4'], flexDirection: 'row', alignItems: 'center', gap: spacing['3'],
+            }}>
+              <Text style={{ fontSize: 20 }}>✅</Text>
+              <Text style={{ color: colors.success, fontWeight: font.semibold, flex: 1 }}>{message}</Text>
+            </View>
+          </AnimatedEntry>
         )}
 
-        {/* Carte détails du créneau */}
+        {/* Match Details */}
         {info && (
           <>
-            <View
-              style={{
-                backgroundColor: colors.card,
-                borderRadius: radius.xl,
-                padding: spacing.xl,
-                marginBottom: spacing.lg,
-                borderLeftWidth: 4,
-                borderLeftColor: colors.secondary,
-                ...shadows.md,
-              }}
-            >
-              <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: spacing.lg }}>
-                ⚽ Détails du match
-              </Text>
-
-              <View style={{ marginBottom: spacing.md }}>
-                <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600', marginBottom: spacing.xs }}>
-                  Date
-                </Text>
-                <Text style={{ color: colors.text, fontWeight: '600', fontSize: 16 }}>
-                  {dateStr}
-                </Text>
-              </View>
-
-              <View style={{ marginBottom: spacing.md }}>
-                <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600', marginBottom: spacing.xs }}>
-                  Heure
-                </Text>
-                <Text style={{ color: colors.text, fontWeight: '700', fontSize: 20 }}>
-                  🕐 {timeStr}
-                </Text>
-              </View>
-
-              <View style={{ flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg }}>
-                <View style={{ flex: 1, backgroundColor: colors.primarySoft, padding: spacing.md, borderRadius: radius.md }}>
-                  <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', marginBottom: spacing.xs }}>
-                    Durée
-                  </Text>
-                  <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 15 }}>
-                    {info.slot.durationMin} min
-                  </Text>
-                </View>
-                <View style={{ flex: 1, backgroundColor: '#DBEAFE', padding: spacing.md, borderRadius: radius.md }}>
-                  <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', marginBottom: spacing.xs }}>
-                    Inscrits
-                  </Text>
-                  <Text style={{ color: colors.secondary, fontWeight: '700', fontSize: 15 }}>
-                    {acceptedCount}/{info.slot.capacity}
-                  </Text>
-                </View>
-                <View style={{ flex: 1, backgroundColor: info.restants > 0 ? colors.primarySoft : '#FEE2E2', padding: spacing.md, borderRadius: radius.md }}>
-                  <Text style={{ color: colors.textMuted, fontSize: 11, fontWeight: '600', marginBottom: spacing.xs }}>
-                    Places
-                  </Text>
-                  <Text style={{ color: info.restants > 0 ? colors.success : colors.danger, fontWeight: '700', fontSize: 15 }}>
-                    {info.restants > 0 ? `${info.restants} libres` : 'Complet'}
-                  </Text>
-                </View>
-              </View>
-
-              <TouchableOpacity
-                style={{
-                  backgroundColor: (info.restants > 0 && !accepting && !hasAccepted) ? colors.success : colors.textMuted,
-                  padding: spacing.lg,
-                  borderRadius: radius.lg,
-                  alignItems: 'center',
-                  ...shadows.md,
-                  opacity: (accepting || hasAccepted) ? 0.6 : 1,
-                }}
-                onPress={accept}
-                disabled={info.restants === 0 || accepting || hasAccepted}
-              >
-                <Text style={{ color: 'white', fontWeight: '700', fontSize: 16 }}>
-                  {hasAccepted ? '✅ Déjà inscrit' : accepting ? '⏳ Inscription...' : info.restants > 0 ? '✅ Je viens !' : '❌ Complet'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Partage du lien */}
-            {(paramInviteUrl || token) && (
-              <View
-                style={{
-                  backgroundColor: colors.card,
-                  borderRadius: radius.xl,
-                  padding: spacing.xl,
-                  ...shadows.md,
-                }}
-              >
-                <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: spacing.md }}>
-                  🔗 Partager l'invitation
-                </Text>
-                <View style={{ 
-                  backgroundColor: colors.backgroundDark, 
-                  padding: spacing.md, 
-                  borderRadius: radius.md,
-                  marginBottom: spacing.md,
+            {/* Hero Time */}
+            <AnimatedEntry delay={0}>
+              <Card noPadding style={{ marginBottom: spacing['5'] }}>
+                <View style={{
+                  backgroundColor: hasSpots ? colors.brandMuted : colors.errorMuted,
+                  padding: spacing['6'], alignItems: 'center',
                 }}>
-                  <Text style={{ color: colors.text, fontSize: 12, fontFamily: 'monospace' }} numberOfLines={2}>
-                    {paramInviteUrl || `${BASE_URL}/invitations/${token}`}
+                  <Badge variant={hasSpots ? 'lime' : 'error'} icon={hasSpots ? '✓' : '✕'}>
+                    {hasSpots ? 'PLACES DISPONIBLES' : 'COMPLET'}
+                  </Badge>
+                  <Text style={{ 
+                    color: colors.textPrimary, fontSize: font['5xl'], fontWeight: font.black,
+                    letterSpacing: -2, marginTop: spacing['3'],
+                  }}>
+                    {timeStr}
+                  </Text>
+                  <Text style={{ color: colors.textSecondary, fontSize: font.base, marginTop: spacing['1'] }}>
+                    {dayName} {dayNum} {month} {year}
                   </Text>
                 </View>
-                <TouchableOpacity
-                  style={{
-                    backgroundColor: colors.secondary,
-                    padding: spacing.md,
-                    borderRadius: radius.lg,
-                    alignItems: 'center',
-                    ...shadows.sm,
-                  }}
-                  onPress={() => Clipboard.setStringAsync(paramInviteUrl || `${BASE_URL}/invitations/${token}`)}
-                >
-                  <Text style={{ color: 'white', fontWeight: '700', fontSize: 14 }}>📋 Copier le lien</Text>
-                </TouchableOpacity>
-              </View>
+
+                {/* Stats */}
+                <View style={{ padding: spacing['4'] }}>
+                  <View style={{ flexDirection: 'row', gap: spacing['3'], marginBottom: spacing['5'] }}>
+                    <Stat value={`${info.slot.durationMin}min`} label="Durée" icon="⏱️" color={colors.textPrimary} />
+                    <Stat value={`${acceptedCount}/${info.slot.capacity}`} label="Inscrits" icon="👥" color={colors.brand} />
+                    <Stat value={hasSpots ? info.restants.toString() : '0'} label="Restantes" icon={hasSpots ? '✓' : '✕'} color={hasSpots ? colors.lime : colors.error} />
+                  </View>
+
+                  {/* Accept Button */}
+                  <Button 
+                    onPress={accept} 
+                    disabled={!hasSpots || accepting || hasAccepted}
+                    loading={accepting}
+                    variant={hasAccepted ? 'secondary' : hasSpots ? 'lime' : 'secondary'}
+                    icon={hasAccepted ? '✓' : hasSpots ? '🎉' : '🔒'}
+                    size="lg"
+                  >
+                    {hasAccepted ? 'Vous êtes inscrit !' : hasSpots ? 'Je participe !' : 'Complet'}
+                  </Button>
+                </View>
+              </Card>
+            </AnimatedEntry>
+
+            {/* Share */}
+            {(paramInviteUrl || token) && (
+              <AnimatedEntry delay={100}>
+                <Card>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: spacing['4'] }}>
+                    <View style={{
+                      width: 44, height: 44, borderRadius: radius.lg, backgroundColor: colors.limeMuted,
+                      alignItems: 'center', justifyContent: 'center', marginRight: spacing['4'],
+                    }}>
+                      <Text style={{ fontSize: 20 }}>📤</Text>
+                    </View>
+                    <View>
+                      <Text style={{ color: colors.textPrimary, fontSize: font.lg, fontWeight: font.bold }}>
+                        Partager
+                      </Text>
+                      <Text style={{ color: colors.textMuted, fontSize: font.sm }}>
+                        Invitez vos amis !
+                      </Text>
+                    </View>
+                  </View>
+                  
+                  <View style={{
+                    backgroundColor: colors.bgInput, padding: spacing['3'], borderRadius: radius.md,
+                    marginBottom: spacing['4'], borderWidth: 1, borderColor: colors.border,
+                  }}>
+                    <Text style={{ color: colors.textSecondary, fontSize: font.xs, fontFamily: 'monospace' }} numberOfLines={2}>
+                      {paramInviteUrl || `${BASE_URL}/invitations/${token}`}
+                    </Text>
+                  </View>
+                  
+                  <Button 
+                    onPress={() => { Clipboard.setStringAsync(paramInviteUrl || `${BASE_URL}/invitations/${token}`); window.alert('📋 Lien copié !'); }}
+                    variant="lime"
+                    icon="📋"
+                  >
+                    Copier le lien
+                  </Button>
+                </Card>
+              </AnimatedEntry>
             )}
           </>
         )}
+
+        <View style={{ height: spacing['8'] }} />
       </View>
     </ScrollView>
   );

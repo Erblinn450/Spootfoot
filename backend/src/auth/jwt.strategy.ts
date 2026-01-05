@@ -3,11 +3,21 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { AuthGuard } from '@nestjs/passport';
 
+const isDev = process.env.NODE_ENV !== 'production';
+
+interface JwtPayload {
+  sub: string;
+  email: string;
+  roles: string[];
+}
+
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor() {
     const secret = process.env.JWT_SECRET || 'change-me';
-    console.log('[JwtStrategy] Using JWT secret:', secret.substring(0, 5) + '...');
+    if (isDev) {
+      console.log('[JwtStrategy] Using JWT secret:', secret.substring(0, 5) + '...');
+    }
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -15,14 +25,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: any) {
-    // payload: { sub, email, roles }
-    console.log('[JwtStrategy] validate called with payload:', JSON.stringify(payload));
+  validate(payload: JwtPayload): { userId: string; email: string; roles: string[] } | null {
     if (!payload || !payload.sub) {
-      console.error('[JwtStrategy] Invalid payload:', payload);
+      if (isDev) console.error('[JwtStrategy] Invalid payload:', payload);
       return null;
     }
-    console.log('[JwtStrategy] Returning user:', { sub: payload.sub, email: payload.email, roles: payload.roles });
     return { userId: payload.sub, email: payload.email, roles: payload.roles };
   }
 }
@@ -30,13 +37,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
   canActivate(context: ExecutionContext) {
-    const request = context.switchToHttp().getRequest();
-    const authHeader = request.headers.authorization;
-    console.log('[JwtAuthGuard] Auth header:', authHeader ? `Bearer ${authHeader.substring(7, 20)}...` : 'MISSING');
     return super.canActivate(context);
   }
-  handleRequest(err: any, user: any) {
-    console.log('[JwtAuthGuard] handleRequest:', { err: err?.message, user: user?.email || 'NO_USER' });
+  
+  handleRequest<TUser = { userId: string; email: string; roles: string[] }>(err: Error | null, user: TUser | false): TUser {
     if (err || !user) {
       throw err || new UnauthorizedException('Token invalide ou expiré');
     }

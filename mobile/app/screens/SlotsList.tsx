@@ -4,65 +4,173 @@ import { BASE_URL } from '../config';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../navigation/types';
-import { colors, spacing, radius, shadows } from '../theme';
-import PrimaryButton from '../components/PrimaryButton';
+import { colors, spacing, radius, font, shadow } from '../theme';
+import { Header, Card, Badge, Stat, EmptyState, Button, AnimatedEntry } from '../components/UI';
 
-type Slot = { _id: string; startAt: string; status: 'OPEN' | 'RESERVED' | 'FULL' };
+type Slot = { _id: string; startAt: string; status: 'OPEN' | 'RESERVED' | 'FULL'; terrainId?: string };
 
-// Carte d'un créneau (avec animation d'apparition)
+// ═══════════════════════════════════════════════════════════════════════════
+// SLOT CARD
+// ═══════════════════════════════════════════════════════════════════════════
+
 function SlotCard({ item, index, onPress }: { item: Slot; index: number; onPress: () => void }) {
   const opacity = React.useRef(new Animated.Value(0)).current;
+  const translateX = React.useRef(new Animated.Value(-30)).current;
+  const scale = React.useRef(new Animated.Value(1)).current;
+  
   React.useEffect(() => {
-    Animated.timing(opacity, { toValue: 1, duration: 250, delay: index * 50, useNativeDriver: true }).start();
-  }, [index, opacity]);
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 400, delay: index * 60, useNativeDriver: true }),
+      Animated.spring(translateX, { toValue: 0, delay: index * 60, friction: 8, useNativeDriver: true }),
+    ]).start();
+  }, [index, opacity, translateX]);
+
+  const handlePressIn = () => {
+    Animated.spring(scale, { toValue: 0.98, friction: 8, useNativeDriver: true }).start();
+  };
+  
+  const handlePressOut = () => {
+    Animated.spring(scale, { toValue: 1, friction: 8, useNativeDriver: true }).start();
+  };
 
   const isOpen = item.status === 'OPEN';
   const isFull = item.status === 'FULL';
-  const badgeColor = isOpen ? colors.primary : isFull ? colors.danger : colors.textMuted;
-  const badgeText = isOpen ? 'Libre' : isFull ? 'Complet' : 'Réservé';
+  const dateObj = new Date(item.startAt);
+  
+  const dayName = dateObj.toLocaleDateString('fr-FR', { weekday: 'short' }).toUpperCase();
+  const dayNum = dateObj.getDate();
+  const month = dateObj.toLocaleDateString('fr-FR', { month: 'short' }).toUpperCase();
+  const timeStr = dateObj.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
-  // Formatage FR
-  const dateStr = new Date(item.startAt).toLocaleDateString('fr-FR', {
-    weekday: 'short', day: '2-digit', month: 'short'
-  });
-  const timeStr = new Date(item.startAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const statusConfig = {
+    OPEN: { variant: 'lime' as const, label: 'DISPONIBLE', icon: '✓' },
+    RESERVED: { variant: 'warning' as const, label: 'RÉSERVÉ', icon: '⏳' },
+    FULL: { variant: 'error' as const, label: 'COMPLET', icon: '✕' },
+  }[item.status];
 
   return (
-    <Animated.View style={{ opacity }}>
+    <Animated.View style={{ 
+      opacity, 
+      transform: [{ translateX }, { scale }],
+      marginBottom: spacing['4'],
+    }}>
       <TouchableOpacity
         onPress={onPress}
-        style={{
-          padding: spacing.lg,
-          backgroundColor: colors.card,
-          borderRadius: radius.lg,
-          marginBottom: spacing.md,
-          borderLeftWidth: 4,
-          borderLeftColor: badgeColor,
-          ...shadows.md,
-        }}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={1}
       >
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs }}>
-          <Text style={{ fontSize: 18, fontWeight: '700', color: colors.text }}>
-            🕐 {timeStr}
-          </Text>
-          <View style={{ backgroundColor: badgeColor, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: radius.pill, ...shadows.sm }}>
-            <Text style={{ color: 'white', fontSize: 13, fontWeight: '700' }}>{badgeText}</Text>
+        <View style={{
+          backgroundColor: colors.bgCard,
+          borderRadius: radius.xl,
+          borderWidth: 1,
+          borderColor: isOpen ? colors.brand : colors.border,
+          overflow: 'hidden',
+        }}>
+          <View style={{ flexDirection: 'row' }}>
+            {/* Date Column */}
+            <View style={{
+              width: 80,
+              backgroundColor: isOpen ? colors.brandMuted : colors.bgElevated,
+              padding: spacing['4'],
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRightWidth: 1,
+              borderRightColor: colors.border,
+            }}>
+              <Text style={{ 
+                color: colors.textMuted, 
+                fontSize: font.xs, 
+                fontWeight: font.bold,
+                letterSpacing: 1,
+              }}>
+                {dayName}
+              </Text>
+              <Text style={{ 
+                color: isOpen ? colors.brand : colors.textPrimary, 
+                fontSize: font['3xl'], 
+                fontWeight: font.black,
+                marginVertical: spacing['1'],
+              }}>
+                {dayNum}
+              </Text>
+              <Text style={{ 
+                color: colors.textMuted, 
+                fontSize: font.xs, 
+                fontWeight: font.semibold,
+              }}>
+                {month}
+              </Text>
+            </View>
+
+            {/* Content */}
+            <View style={{ flex: 1, padding: spacing['4'] }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing['3'] }}>
+                <View>
+                  <Text style={{ 
+                    color: colors.textPrimary, 
+                    fontSize: font['2xl'], 
+                    fontWeight: font.black,
+                    letterSpacing: -0.5,
+                  }}>
+                    {timeStr}
+                  </Text>
+                  <Text style={{ color: colors.textMuted, fontSize: font.sm, marginTop: spacing['1'] }}>
+                    1h • 10 places
+                  </Text>
+                </View>
+                <Badge variant={statusConfig.variant} icon={statusConfig.icon}>
+                  {statusConfig.label}
+                </Badge>
+              </View>
+
+              {/* Action Row */}
+              <View style={{ 
+                flexDirection: 'row', 
+                alignItems: 'center',
+                paddingTop: spacing['3'],
+                borderTopWidth: 1,
+                borderTopColor: colors.border,
+              }}>
+                <Text style={{ 
+                  color: isOpen ? colors.lime : colors.textMuted, 
+                  fontSize: font.sm, 
+                  fontWeight: font.semibold,
+                  flex: 1,
+                }}>
+                  {isOpen ? 'Réserver maintenant' : 'Voir les détails'}
+                </Text>
+                <View style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: radius.full,
+                  backgroundColor: isOpen ? colors.lime : colors.gray700,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <Text style={{ color: isOpen ? colors.gray950 : colors.textMuted, fontSize: font.sm }}>
+                    →
+                  </Text>
+                </View>
+              </View>
+            </View>
           </View>
         </View>
-        <Text style={{ fontSize: 14, color: colors.textMuted, fontWeight: '600' }}>
-          📅 {dateStr}
-        </Text>
       </TouchableOpacity>
     </Animated.View>
   );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MAIN SCREEN
+// ═══════════════════════════════════════════════════════════════════════════
 
 export default function SlotsList() {
   const [slots, setSlots] = React.useState<Slot[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  // Chargement de la liste des créneaux
+
   const load = React.useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -70,10 +178,8 @@ export default function SlotsList() {
       const r = await fetch(`${BASE_URL}/slots`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const data: Slot[] = await r.json();
-      console.log('Slots reçus:', data?.length);
       setSlots(Array.isArray(data) ? data : []);
     } catch (e: any) {
-      console.error('Erreur chargement /slots:', e);
       setError(e?.message ?? 'Erreur réseau');
       setSlots([]);
     } finally {
@@ -81,131 +187,148 @@ export default function SlotsList() {
     }
   }, []);
 
-  React.useEffect(() => {
-    load();
-  }, [load]);
+  React.useEffect(() => { load(); }, [load]);
+  useFocusEffect(React.useCallback(() => { load(); }, [load]));
 
-  // Recharger la liste quand l'écran reprend le focus (ex: retour depuis Détail/Invitation)
-  useFocusEffect(
-    React.useCallback(() => {
-      load();
-    }, [load])
-  );
+  const stats = React.useMemo(() => ({
+    open: slots.filter(s => s.status === 'OPEN').length,
+    reserved: slots.filter(s => s.status === 'RESERVED').length,
+    full: slots.filter(s => s.status === 'FULL').length,
+  }), [slots]);
+
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Header moderne */}
-      <View style={{ 
-        backgroundColor: colors.primary, 
-        paddingTop: spacing.xl,
-        paddingBottom: spacing.lg,
-        paddingHorizontal: spacing.xl,
-        borderBottomLeftRadius: radius.xl,
-        borderBottomRightRadius: radius.xl,
-        ...shadows.lg,
-      }}>
-        <Text style={{ fontSize: 32, fontWeight: '800', color: 'white', marginBottom: spacing.xs }}>
-          ⚽ SpotFoot
-        </Text>
-        <Text style={{ fontSize: 16, fontWeight: '600', color: 'rgba(255,255,255,0.9)', marginBottom: spacing.sm }}>
-          Terrains disponibles
-        </Text>
-        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      {/* Gradient blobs */}
+      <View style={{
+        position: 'absolute',
+        top: -50,
+        right: -100,
+        width: 300,
+        height: 300,
+        borderRadius: 150,
+        backgroundColor: colors.brandGlow,
+        opacity: 0.15,
+      }} />
+      
+      <Header 
+        title="SpotFoot" 
+        subtitle="Réservez vos créneaux"
+        icon="⚽"
+        rightElement={
           <TouchableOpacity
-            style={{
-              flex: 1,
-              backgroundColor: 'white',
-              padding: spacing.md,
-              borderRadius: radius.lg,
-              alignItems: 'center',
-              ...shadows.md,
-              opacity: loading ? 0.5 : 1,
-            }}
-            onPress={load}
-            disabled={loading}
-          >
-            <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>
-              {loading ? '⏳ Chargement...' : '🔄 Rafraîchir'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={{
-              backgroundColor: 'white',
-              padding: spacing.md,
-              borderRadius: radius.lg,
-              alignItems: 'center',
-              minWidth: 100,
-              ...shadows.md,
-            }}
             onPress={() => navigation.navigate('InviteLanding')}
+            style={{
+              backgroundColor: colors.bgCard,
+              paddingHorizontal: spacing['4'],
+              paddingVertical: spacing['3'],
+              borderRadius: radius.lg,
+              borderWidth: 1,
+              borderColor: colors.border,
+            }}
           >
-            <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>👥 Inviter</Text>
+            <Text style={{ color: colors.textSecondary, fontSize: font.sm, fontWeight: font.semibold }}>
+              🎫 Invitation
+            </Text>
           </TouchableOpacity>
-        </View>
-      </View>
+        }
+      />
 
-      <View style={{ flex: 1, padding: spacing.lg }}>
-
-        {error && (
-          <View style={{ 
-            backgroundColor: '#FEE2E2', 
-            padding: spacing.md, 
-            borderRadius: radius.lg, 
-            marginBottom: spacing.md,
-            borderLeftWidth: 4,
-            borderLeftColor: colors.danger,
-            ...shadows.sm,
-          }}>
-            <Text style={{ color: colors.danger, fontWeight: '600' }}>❌ Erreur: {error}</Text>
-          </View>
-        )}
-        {!loading && !error && slots.length === 0 && (
-          <View style={{
-            padding: spacing.xxl,
-            backgroundColor: colors.card,
-            borderRadius: radius.lg,
-            alignItems: 'center',
-            ...shadows.sm,
-          }}>
-            <Text style={{ fontSize: 48, marginBottom: spacing.md }}>💭</Text>
-            <Text style={{ color: colors.text, fontWeight: '600', fontSize: 16, marginBottom: spacing.xs }}>
-              Aucun créneau
-            </Text>
-            <Text style={{ color: colors.textMuted, textAlign: 'center' }}>
-              Aucun terrain disponible pour le moment
-            </Text>
-          </View>
-        )}
-        {loading && (
-          <View style={{ marginTop: spacing.xl, alignItems: 'center' }}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <Text style={{ color: colors.textMuted, marginTop: spacing.md }}>Chargement des créneaux...</Text>
-          </View>
-        )}
+      <View style={{ flex: 1, paddingHorizontal: spacing['5'] }}>
+        {/* Stats */}
         {!loading && slots.length > 0 && (
-          <View style={{ 
-            marginBottom: spacing.md,
-            paddingBottom: spacing.sm,
-            borderBottomWidth: 2,
-            borderBottomColor: colors.primary,
+          <AnimatedEntry delay={0}>
+            <View style={{ flexDirection: 'row', gap: spacing['3'], marginBottom: spacing['6'] }}>
+              <Stat value={stats.open} label="Disponibles" icon="✓" color={colors.lime} />
+              <Stat value={stats.reserved} label="Réservés" icon="⏳" color={colors.warning} />
+              <Stat value={stats.full} label="Complets" icon="✕" color={colors.error} />
+            </View>
+          </AnimatedEntry>
+        )}
+
+        {/* Error */}
+        {error && (
+          <View style={{
+            backgroundColor: colors.errorMuted,
+            padding: spacing['4'],
+            borderRadius: radius.lg,
+            marginBottom: spacing['4'],
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing['3'],
           }}>
-            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>
-              🏟️ {slots.length} créneau{slots.length > 1 ? 'x' : ''} disponible{slots.length > 1 ? 's' : ''}
+            <Text style={{ fontSize: font.xl }}>⚠️</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.error, fontWeight: font.bold, marginBottom: spacing['1'] }}>
+                Erreur de connexion
+              </Text>
+              <Text style={{ color: colors.error, fontSize: font.sm }}>{error}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Loading */}
+        {loading && (
+          <View style={{ alignItems: 'center', paddingVertical: spacing['12'] }}>
+            <ActivityIndicator size="large" color={colors.brand} />
+            <Text style={{ color: colors.textMuted, marginTop: spacing['4'], fontWeight: font.medium }}>
+              Chargement...
             </Text>
           </View>
         )}
-        <FlatList
-          data={slots}
-          keyExtractor={(s) => s._id}
-          contentContainerStyle={{ paddingBottom: spacing.lg }}
-          refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.primary} />}
-          renderItem={({ item, index }) => (
-            <SlotCard
-              item={item}
-              index={index}
-              onPress={() => navigation.navigate('SlotDetail', { slotId: item._id })}
+
+        {/* Empty State */}
+        {!loading && !error && slots.length === 0 && (
+          <EmptyState
+            icon="🏟️"
+            title="Aucun créneau"
+            description="Les créneaux disponibles apparaîtront ici. Revenez bientôt !"
+            action={{ label: 'Rafraîchir', onPress: load }}
+          />
+        )}
+
+        {/* List */}
+        {!loading && slots.length > 0 && (
+          <>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing['4'] }}>
+              <Text style={{ 
+                color: colors.textMuted, 
+                fontSize: font.xs, 
+                fontWeight: font.bold,
+                letterSpacing: 1,
+                textTransform: 'uppercase',
+              }}>
+                {slots.length} créneaux
+              </Text>
+              <TouchableOpacity onPress={load} disabled={loading}>
+                <Text style={{ color: colors.brand, fontSize: font.sm, fontWeight: font.semibold }}>
+                  ↻ Actualiser
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={slots}
+              keyExtractor={(s) => s._id}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: spacing['8'] }}
+              refreshControl={
+                <RefreshControl 
+                  refreshing={loading} 
+                  onRefresh={load} 
+                  tintColor={colors.brand}
+                  colors={[colors.brand]}
+                />
+              }
+              renderItem={({ item, index }) => (
+                <SlotCard
+                  item={item}
+                  index={index}
+                  onPress={() => navigation.navigate('SlotDetail', { slotId: item._id })}
+                />
+              )}
             />
-          )}
-        />
+          </>
+        )}
       </View>
     </View>
   );

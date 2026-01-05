@@ -51,9 +51,13 @@ export class AuthDevController {
     if (!body?.email) throw new HttpException('email required', HttpStatus.BAD_REQUEST);
     const user = await this.users.findByEmail(body.email);
     if (!user) throw new HttpException('user not found', HttpStatus.NOT_FOUND);
-    const granted = await this.users.addRole((user as any)._id?.toString?.() ?? (user as any)._id, 'admin');
+    const granted = await this.users.addRole(user._id.toString(), 'admin');
     if (!granted) throw new HttpException('failed to grant', HttpStatus.INTERNAL_SERVER_ERROR);
-    const accessToken = await this.auth.signAccess({ _id: (granted as any)._id?.toString?.() ?? (granted as any)._id, email: granted.email, roles: granted.roles || [] });
+    const accessToken = await this.auth.signAccess({ 
+      _id: granted._id.toString(), 
+      email: granted.email, 
+      roles: granted.roles || [] 
+    });
     return { user: granted, accessToken };
   }
 }

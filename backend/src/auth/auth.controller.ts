@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiBody, ApiTags } from '@nestjs/swagger';
+import { Request } from 'express';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt.strategy';
 import { IsEmail, IsString, MinLength } from 'class-validator';
@@ -11,6 +12,14 @@ class AuthDto {
   @IsString()
   @MinLength(6)
   password!: string;
+}
+
+interface AuthenticatedRequest extends Request {
+  user: {
+    userId: string;
+    email: string;
+    roles: string[];
+  };
 }
 
 @ApiTags('auth')
@@ -32,7 +41,7 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get('me')
-  async me(@Req() req: any) {
-    return { userId: req.user.sub, email: req.user.email, roles: req.user.roles };
+  me(@Req() req: AuthenticatedRequest) {
+    return { userId: req.user.userId, email: req.user.email, roles: req.user.roles };
   }
 }

@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, ScrollView, Alert, Modal, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, Alert, Modal, TouchableOpacity, Animated } from 'react-native';
 import { Calendar } from 'react-native-calendars';
-import { colors, spacing, radius, shadows } from '../theme';
-import PrimaryButton from '../components/PrimaryButton';
+import { colors, spacing, radius, font, shadow } from '../theme';
+import { Header, Card, Badge, Button, Input, EmptyState, AnimatedEntry } from '../components/UI';
 import { useUser } from '../state/UserContext';
 import { apiClient } from '../utils/apiClient';
 
@@ -21,19 +21,125 @@ interface Terrain {
   address?: string;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// SLOT CARD
+// ═══════════════════════════════════════════════════════════════════════════
+
+function SlotCard({ slot, terrain, index, onDelete, loading }: { 
+  slot: Slot; terrain?: Terrain; index: number; onDelete: () => void; loading: boolean;
+}) {
+  const opacity = React.useRef(new Animated.Value(0)).current;
+  const translateX = React.useRef(new Animated.Value(-20)).current;
+  
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 300, delay: index * 60, useNativeDriver: true }),
+      Animated.spring(translateX, { toValue: 0, delay: index * 60, friction: 8, useNativeDriver: true }),
+    ]).start();
+  }, [index, opacity, translateX]);
+
+  const time = new Date(slot.startAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
+  const isOpen = slot.status === 'OPEN';
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateX }], marginBottom: spacing['3'] }}>
+      <Card noPadding>
+        <View style={{ flexDirection: 'row' }}>
+          {/* Time */}
+          <View style={{
+            width: 80, backgroundColor: isOpen ? colors.brandMuted : colors.warningMuted,
+            alignItems: 'center', justifyContent: 'center', padding: spacing['3'],
+          }}>
+            <Text style={{ color: isOpen ? colors.brand : colors.warning, fontSize: font.xl, fontWeight: font.black }}>
+              {time}
+            </Text>
+            <Text style={{ color: colors.textMuted, fontSize: font.xs, fontWeight: font.semibold, marginTop: spacing['1'] }}>
+              {slot.durationMin}min
+            </Text>
+          </View>
+
+          {/* Content */}
+          <View style={{ flex: 1, padding: spacing['3'] }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.textPrimary, fontWeight: font.bold, fontSize: font.base, marginBottom: spacing['1'] }}>
+                  {terrain?.name || 'Terrain inconnu'}
+                </Text>
+                {terrain?.address && (
+                  <Text style={{ color: colors.textMuted, fontSize: font.xs }}>
+                    📍 {terrain.address}
+                  </Text>
+                )}
+              </View>
+              
+              <TouchableOpacity
+                onPress={onDelete}
+                disabled={loading}
+                style={{
+                  backgroundColor: colors.errorMuted, paddingHorizontal: spacing['3'],
+                  paddingVertical: spacing['2'], borderRadius: radius.md,
+                }}
+              >
+                <Text style={{ fontSize: 14 }}>{loading ? '⏳' : '🗑️'}</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <View style={{ flexDirection: 'row', gap: spacing['2'], marginTop: spacing['2'] }}>
+              <Badge variant="default">👥 {slot.capacity}</Badge>
+              <Badge variant={isOpen ? 'lime' : 'warning'} icon={isOpen ? '✓' : '⏳'}>
+                {isOpen ? 'Libre' : 'Réservé'}
+              </Badge>
+            </View>
+          </View>
+        </View>
+      </Card>
+    </Animated.View>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODAL BOTTOM SHEET
+// ═══════════════════════════════════════════════════════════════════════════
+
+function BottomSheet({ visible, onClose, title, children }: {
+  visible: boolean; onClose: () => void; title: string; children: React.ReactNode;
+}) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent>
+      <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' }}>
+        <View style={{ 
+          backgroundColor: colors.bgCard, borderTopLeftRadius: radius['2xl'], borderTopRightRadius: radius['2xl'],
+          padding: spacing['5'], paddingBottom: spacing['10'],
+        }}>
+          <View style={{ 
+            width: 40, height: 4, backgroundColor: colors.gray700, borderRadius: 2,
+            alignSelf: 'center', marginBottom: spacing['5'],
+          }} />
+          <Text style={{ color: colors.textPrimary, fontSize: font['2xl'], fontWeight: font.black, marginBottom: spacing['5'] }}>
+            {title}
+          </Text>
+          {children}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MAIN SCREEN
+// ═══════════════════════════════════════════════════════════════════════════
+
 export default function CalendarAdminScreen() {
-  const { user, isAdmin } = useUser();
+  const { isAdmin } = useUser();
   const [selectedDate, setSelectedDate] = React.useState(new Date().toISOString().split('T')[0]);
   const [slots, setSlots] = React.useState<Slot[]>([]);
   const [terrains, setTerrains] = React.useState<Terrain[]>([]);
   const [loading, setLoading] = React.useState<string | null>(null);
   
-  // Modal states
   const [showCreateModal, setShowCreateModal] = React.useState(false);
   const [showTerrainModal, setShowTerrainModal] = React.useState(false);
   const [showTemplateModal, setShowTemplateModal] = React.useState(false);
   
-  // Form states
   const [selectedTerrain, setSelectedTerrain] = React.useState<string>('');
   const [selectedTime, setSelectedTime] = React.useState('18:00');
   const [newTerrainName, setNewTerrainName] = React.useState('');
@@ -41,208 +147,109 @@ export default function CalendarAdminScreen() {
 
   const refreshData = async () => {
     try {
-      // Fetch terrains
-      const terrainsRes = await apiClient.get('/admin/terrains');
-      if (terrainsRes.data) {
-        setTerrains(Array.isArray(terrainsRes.data) ? terrainsRes.data : []);
-      }
-
-      // Fetch slots
-      const slotsRes = await apiClient.get('/slots');
-      if (slotsRes.data) {
-        setSlots(Array.isArray(slotsRes.data) ? slotsRes.data : []);
-      }
+      const [terrainsRes, slotsRes] = await Promise.all([
+        apiClient.get('/admin/terrains'),
+        apiClient.get('/slots'),
+      ]);
+      if (terrainsRes.data) setTerrains(Array.isArray(terrainsRes.data) ? terrainsRes.data : []);
+      if (slotsRes.data) setSlots(Array.isArray(slotsRes.data) ? slotsRes.data : []);
     } catch (e) {
-      console.warn('Error refreshing data:', e);
+      console.warn('Error refreshing:', e);
     }
   };
 
-  React.useEffect(() => {
-    refreshData();
-  }, []);
+  React.useEffect(() => { refreshData(); }, []);
 
-  // Prepare calendar marking
   const markedDates = React.useMemo(() => {
-    const marked: any = {};
-    
-    // Mark selected date
-    marked[selectedDate] = {
-      selected: true,
-      selectedColor: colors.primary,
-    };
-
-    // Mark dates with slots
+    const marked: Record<string, any> = {};
+    marked[selectedDate] = { selected: true, selectedColor: colors.brand };
     slots.forEach(slot => {
       const date = slot.startAt.split('T')[0];
-      if (!marked[date]) {
-        marked[date] = { dots: [] };
-      } else if (!marked[date].dots) {
-        marked[date].dots = [];
-      }
-      marked[date].dots.push({
-        color: slot.status === 'OPEN' ? colors.success : colors.warning,
-      });
+      if (!marked[date]) marked[date] = { dots: [] };
+      else if (!marked[date].dots) marked[date].dots = [];
+      marked[date].dots.push({ color: slot.status === 'OPEN' ? colors.lime : colors.warning });
       marked[date].markingType = 'multi-dot';
     });
-
     return marked;
   }, [selectedDate, slots]);
 
-  // Get slots for selected date
-  const slotsForDate = slots.filter(slot => 
-    slot.startAt.split('T')[0] === selectedDate
-  ).sort((a, b) => a.startAt.localeCompare(b.startAt));
+  const slotsForDate = slots.filter(s => s.startAt.split('T')[0] === selectedDate).sort((a, b) => a.startAt.localeCompare(b.startAt));
 
   const createSlot = async () => {
-    if (!selectedTerrain || !selectedTime) {
-      Alert.alert('Erreur', 'Sélectionnez un terrain et une heure');
-      return;
-    }
-
+    if (!selectedTerrain || !selectedTime) return Alert.alert('Erreur', 'Sélectionnez terrain et heure');
     setLoading('create-slot');
     try {
-      // Créer une date locale puis la convertir en UTC
-      const localDateTime = new Date(`${selectedDate}T${selectedTime}:00`);
-      const startAt = localDateTime.toISOString();
-      
-      const response = await apiClient.post('/admin/slots', {
+      const res = await apiClient.post('/admin/slots', {
         terrainId: selectedTerrain,
-        startAt,
-        durationMin: 60,
-        capacity: 10,
+        startAt: new Date(`${selectedDate}T${selectedTime}:00`).toISOString(),
+        durationMin: 60, capacity: 10,
       });
-
-      if (response.error) {
-        throw new Error(response.error);
-      }
-      
-      Alert.alert('Succès', 'Créneau créé avec succès');
+      if (res.error) throw new Error(res.error);
+      Alert.alert('✅ Succès', 'Créneau créé');
       setShowCreateModal(false);
       refreshData();
     } catch (e: any) {
-      Alert.alert('Erreur', e.message || 'Erreur réseau');
+      Alert.alert('❌ Erreur', e.message);
     } finally {
       setLoading(null);
     }
   };
 
   const createTerrain = async () => {
-    if (!newTerrainName.trim()) {
-      Alert.alert('Erreur', 'Le nom du terrain est requis');
-      return;
-    }
-
+    if (!newTerrainName.trim()) return Alert.alert('Erreur', 'Nom requis');
     setLoading('create-terrain');
     try {
-      const response = await apiClient.post('/admin/terrains', {
-        name: newTerrainName.trim(),
-        address: newTerrainAddress.trim() || undefined,
-      });
-
-      if (response.error) {
-        throw new Error(response.error);
-      }
-      
-      Alert.alert('Succès', 'Terrain créé avec succès');
-      setNewTerrainName('');
-      setNewTerrainAddress('');
-      setSelectedTerrain(response.data._id);
+      const res = await apiClient.post('/admin/terrains', { name: newTerrainName.trim(), address: newTerrainAddress.trim() || undefined });
+      if (res.error) throw new Error(res.error);
+      Alert.alert('✅ Succès', 'Terrain créé');
+      setNewTerrainName(''); setNewTerrainAddress('');
+      setSelectedTerrain(res.data._id);
       setShowTerrainModal(false);
       refreshData();
     } catch (e: any) {
-      Alert.alert('Erreur', e.message || 'Erreur réseau');
+      Alert.alert('❌ Erreur', e.message);
     } finally {
       setLoading(null);
     }
   };
 
   const deleteSlot = async (slotId: string) => {
-    console.log('deleteSlot called with:', slotId);
-    
-    // Utiliser confirm() natif du navigateur au lieu de Alert.alert
-    const confirmed = window.confirm('Supprimer ce créneau ?');
-    
-    if (!confirmed) {
-      console.log('Delete cancelled by user');
-      return;
-    }
-
+    if (!window.confirm('Supprimer ce créneau ?')) return;
     try {
-      setLoading('delete-slot');
-      console.log('Starting delete for slot:', slotId);
-      
-      const url = `http://localhost:3001/admin/slots/${slotId}`;
-      console.log('DELETE URL:', url);
-      console.log('Token:', user.accessToken?.substring(0, 20) + '...');
-      
-      const response = await fetch(url, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${user.accessToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      console.log('Delete response status:', response.status);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Delete failed:', errorText);
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-      }
-      
-      const result = await response.json();
-      console.log('Delete success:', result);
-      
-      window.alert('Créneau supprimé avec succès !');
+      setLoading('delete');
+      const res = await apiClient.delete(`/admin/slots/${slotId}`);
+      if (res.error) throw new Error(res.error);
+      window.alert('✅ Créneau supprimé');
       await refreshData();
     } catch (e: any) {
-      console.error('Delete error:', e);
-      window.alert('Erreur: ' + (e.message || 'Impossible de supprimer le créneau'));
+      window.alert('❌ ' + (e.message || 'Erreur'));
     } finally {
       setLoading(null);
     }
   };
 
   const createWeekTemplate = async () => {
-    if (!selectedTerrain) {
-      Alert.alert('Erreur', 'Sélectionnez un terrain');
-      return;
-    }
-
+    if (!selectedTerrain) return Alert.alert('Erreur', 'Sélectionnez un terrain');
     setLoading('template');
     try {
       const startDate = new Date(selectedDate);
       const promises = [];
-
-      // Créer des créneaux pour la semaine (Lundi à Vendredi, 18h-20h)
       for (let i = 0; i < 7; i++) {
         const date = new Date(startDate);
         date.setDate(startDate.getDate() + i);
-        
-        // Skip weekends for this template
         if (date.getDay() === 0 || date.getDay() === 6) continue;
-
-        // Créer une date locale à 18h puis la convertir en UTC
-        const localDateTime = new Date(`${date.toISOString().split('T')[0]}T18:00:00`);
-        const startAt = localDateTime.toISOString();
-        
-        promises.push(
-          apiClient.post('/admin/slots', {
-            terrainId: selectedTerrain,
-            startAt,
-            durationMin: 120, // 2h
-            capacity: 10,
-          })
-        );
+        promises.push(apiClient.post('/admin/slots', {
+          terrainId: selectedTerrain,
+          startAt: new Date(`${date.toISOString().split('T')[0]}T18:00:00`).toISOString(),
+          durationMin: 120, capacity: 10,
+        }));
       }
-
       await Promise.all(promises);
-      Alert.alert('Succès', 'Template de semaine créé (Lun-Ven 18h-20h)');
+      Alert.alert('✅ Succès', 'Template créé');
       setShowTemplateModal(false);
       refreshData();
     } catch (e: any) {
-      Alert.alert('Erreur', e.message || 'Erreur lors de la création du template');
+      Alert.alert('❌ Erreur', e.message);
     } finally {
       setLoading(null);
     }
@@ -250,454 +257,209 @@ export default function CalendarAdminScreen() {
 
   if (!isAdmin) {
     return (
-      <View style={{ flex: 1, padding: spacing.lg, backgroundColor: colors.background }}>
-        <Text style={{ color: colors.danger }}>Accès refusé. Vous devez être admin.</Text>
+      <View style={{ flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center', padding: spacing['6'] }}>
+        <View style={{
+          width: 80, height: 80, borderRadius: radius['2xl'], backgroundColor: colors.errorMuted,
+          alignItems: 'center', justifyContent: 'center', marginBottom: spacing['5'],
+        }}>
+          <Text style={{ fontSize: 36 }}>🔒</Text>
+        </View>
+        <Text style={{ color: colors.textPrimary, fontSize: font.xl, fontWeight: font.bold, marginBottom: spacing['2'] }}>
+          Accès refusé
+        </Text>
+        <Text style={{ color: colors.textMuted, textAlign: 'center' }}>
+          Vous devez être administrateur.
+        </Text>
       </View>
     );
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Header avec style moderne */}
-      <View style={{ 
-        padding: spacing.xl,
-        backgroundColor: colors.primary,
-        borderBottomLeftRadius: radius.xl,
-        borderBottomRightRadius: radius.xl,
-        ...shadows.lg,
-      }}>
-        <Text style={{ fontSize: 28, fontWeight: '800', color: 'white', marginBottom: spacing.sm }}>
-          📅 Calendrier Admin
-        </Text>
-        <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 15 }}>
-          Gérez vos créneaux visuellement
-        </Text>
+    <ScrollView style={{ flex: 1, backgroundColor: colors.bg }}>
+      {/* Gradient */}
+      <View style={{
+        position: 'absolute', top: -50, right: -100, width: 300, height: 300,
+        borderRadius: 150, backgroundColor: colors.limeGlow, opacity: 0.15,
+      }} />
 
-        {/* Action buttons avec ombres */}
-        <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.lg }}>
-          <TouchableOpacity
-            style={{
-              flex: 1,
-              backgroundColor: 'white',
-              padding: spacing.md,
-              borderRadius: radius.lg,
-              alignItems: 'center',
-              ...shadows.md,
+      <Header 
+        title="Admin" 
+        subtitle="Gestion des créneaux"
+        icon="📅"
+        rightElement={
+          <View style={{ flexDirection: 'row', gap: spacing['2'] }}>
+            <TouchableOpacity
+              onPress={() => setShowTerrainModal(true)}
+              style={{ backgroundColor: colors.bgCard, padding: spacing['3'], borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border }}
+            >
+              <Text style={{ fontSize: 18 }}>🏟️</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowTemplateModal(true)}
+              style={{ backgroundColor: colors.bgCard, padding: spacing['3'], borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border }}
+            >
+              <Text style={{ fontSize: 18 }}>📋</Text>
+            </TouchableOpacity>
+          </View>
+        }
+      />
+
+      {/* Calendar */}
+      <View style={{ marginHorizontal: spacing['4'], marginBottom: spacing['5'] }}>
+        <Card noPadding>
+          <Calendar
+            current={selectedDate}
+            onDayPress={(day) => setSelectedDate(day.dateString)}
+            markedDates={markedDates}
+            theme={{
+              backgroundColor: colors.bgCard,
+              calendarBackground: colors.bgCard,
+              textSectionTitleColor: colors.textMuted,
+              selectedDayBackgroundColor: colors.brand,
+              selectedDayTextColor: colors.gray950,
+              todayTextColor: colors.brand,
+              dayTextColor: colors.textPrimary,
+              textDisabledColor: colors.textDisabled,
+              arrowColor: colors.brand,
+              monthTextColor: colors.textPrimary,
+              textMonthFontWeight: '700',
+              textDayFontSize: font.base,
+              textMonthFontSize: font.lg,
             }}
-            onPress={() => setShowCreateModal(true)}
-          >
-            <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 15 }}>➕ Nouveau</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={{
-              backgroundColor: 'white',
-              padding: spacing.md,
-              borderRadius: radius.lg,
-              alignItems: 'center',
-              minWidth: 60,
-              ...shadows.md,
-            }}
-            onPress={() => setShowTerrainModal(true)}
-          >
-            <Text style={{ fontSize: 20 }}>🏟️</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={{
-              backgroundColor: 'white',
-              padding: spacing.md,
-              borderRadius: radius.lg,
-              alignItems: 'center',
-              minWidth: 60,
-              ...shadows.md,
-            }}
-            onPress={() => setShowTemplateModal(true)}
-          >
-            <Text style={{ fontSize: 20 }}>📋</Text>
-          </TouchableOpacity>
-        </View>
+          />
+        </Card>
       </View>
 
-      {/* Calendar avec ombre */}
-      <View style={{ marginHorizontal: spacing.lg, marginTop: spacing.lg, ...shadows.md, borderRadius: radius.lg, overflow: 'hidden' }}>
-        <Calendar
-          current={selectedDate}
-          onDayPress={(day) => setSelectedDate(day.dateString)}
-          markedDates={markedDates}
-          theme={{
-            backgroundColor: colors.background,
-            calendarBackground: colors.card,
-            textSectionTitleColor: colors.text,
-            selectedDayBackgroundColor: colors.primary,
-            selectedDayTextColor: 'white',
-            todayTextColor: colors.primary,
-            dayTextColor: colors.text,
-            textDisabledColor: colors.textMuted,
-            arrowColor: colors.primary,
-            monthTextColor: colors.text,
-            textMonthFontWeight: '700',
-            textDayFontSize: 15,
-            textMonthFontSize: 18,
-          }}
-        />
-      </View>
-
-      {/* Slots for selected date */}
-      <View style={{ padding: spacing.lg }}>
-        <View style={{ 
-          flexDirection: 'row', 
-          alignItems: 'center', 
-          justifyContent: 'space-between',
-          marginBottom: spacing.md,
-          paddingBottom: spacing.sm,
-          borderBottomWidth: 2,
-          borderBottomColor: colors.primary,
-        }}>
-          <Text style={{ fontSize: 20, fontWeight: '700', color: colors.text }}>
-            📆 {new Date(selectedDate + 'T00:00:00').toLocaleDateString('fr-FR', { 
-              weekday: 'long', 
-              day: 'numeric', 
-              month: 'long' 
-            })}
-          </Text>
-          <View style={{ 
-            backgroundColor: colors.primarySoft, 
-            paddingHorizontal: spacing.md, 
-            paddingVertical: spacing.xs, 
-            borderRadius: radius.pill 
-          }}>
-            <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 14 }}>
-              {slotsForDate.length} créneau{slotsForDate.length > 1 ? 'x' : ''}
+      {/* Slots */}
+      <View style={{ paddingHorizontal: spacing['4'] }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing['4'] }}>
+          <View>
+            <Text style={{ color: colors.textMuted, fontSize: font.xs, fontWeight: font.bold, letterSpacing: 1, textTransform: 'uppercase' }}>
+              Créneaux du jour
+            </Text>
+            <Text style={{ color: colors.textPrimary, fontSize: font.lg, fontWeight: font.bold, marginTop: spacing['1'] }}>
+              {new Date(selectedDate + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
             </Text>
           </View>
+          <Badge variant="brand">{slotsForDate.length}</Badge>
         </View>
 
         {slotsForDate.length === 0 ? (
-          <View style={{
-            padding: spacing.xxl,
-            backgroundColor: colors.card,
-            borderRadius: radius.lg,
-            alignItems: 'center',
-            ...shadows.sm,
-          }}>
-            <Text style={{ fontSize: 48, marginBottom: spacing.md }}>📭</Text>
-            <Text style={{ color: colors.text, fontWeight: '600', fontSize: 16, marginBottom: spacing.xs }}>
-              Aucun créneau
-            </Text>
-            <Text style={{ color: colors.textMuted, marginBottom: spacing.lg, textAlign: 'center' }}>
-              Créez votre premier créneau pour cette date
-            </Text>
-            <TouchableOpacity
-              style={{
-                backgroundColor: colors.primary,
-                paddingHorizontal: spacing.xl,
-                paddingVertical: spacing.md,
-                borderRadius: radius.lg,
-                ...shadows.md,
-              }}
-              onPress={() => setShowCreateModal(true)}
-            >
-              <Text style={{ color: 'white', fontWeight: '700', fontSize: 15 }}>➕ Créer un créneau</Text>
-            </TouchableOpacity>
-          </View>
+          <EmptyState
+            icon="📭"
+            title="Aucun créneau"
+            description="Créez votre premier créneau"
+            action={{ label: 'Créer un créneau', onPress: () => setShowCreateModal(true) }}
+          />
         ) : (
-          slotsForDate.map((slot) => {
-            const terrain = terrains.find(t => t._id === slot.terrainId);
-            const time = new Date(slot.startAt).toLocaleTimeString('fr-FR', { 
-              hour: '2-digit', 
-              minute: '2-digit',
-              timeZone: 'Europe/Paris'
-            });
-            
-            return (
-              <View
+          <>
+            {slotsForDate.map((slot, index) => (
+              <SlotCard
                 key={slot._id}
-                style={{
-                  backgroundColor: colors.card,
-                  padding: spacing.lg,
-                  borderRadius: radius.lg,
-                  marginBottom: spacing.md,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  borderLeftWidth: 4,
-                  borderLeftColor: slot.status === 'OPEN' ? colors.success : colors.warning,
-                  ...shadows.md,
-                }}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.text, fontWeight: '700', fontSize: 17, marginBottom: spacing.xs }}>
-                    🕐 {time}
-                  </Text>
-                  <Text style={{ color: colors.text, fontWeight: '600', fontSize: 15, marginBottom: spacing.xs }}>
-                    {terrain?.name || 'Terrain inconnu'}
-                  </Text>
-                  <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs }}>
-                    <View style={{ backgroundColor: colors.primarySoft, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm }}>
-                      <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '600' }}>
-                        {slot.durationMin}min
-                      </Text>
-                    </View>
-                    <View style={{ backgroundColor: colors.primarySoft, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm }}>
-                      <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '600' }}>
-                        {slot.capacity} places
-                      </Text>
-                    </View>
-                    <View style={{ backgroundColor: slot.status === 'OPEN' ? colors.primarySoft : '#FEF3C7', paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm }}>
-                      <Text style={{ color: slot.status === 'OPEN' ? colors.success : colors.warning, fontSize: 12, fontWeight: '600' }}>
-                        {slot.status}
-                      </Text>
-                    </View>
-                  </View>
-                  {terrain?.address && (
-                    <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: spacing.xs }}>
-                      📍 {terrain.address}
-                    </Text>
-                  )}
-                </View>
-                
-                <TouchableOpacity
-                  style={{
-                    backgroundColor: loading === 'delete-slot' ? colors.textMuted : colors.danger,
-                    paddingHorizontal: spacing.md,
-                    paddingVertical: spacing.md,
-                    borderRadius: radius.md,
-                    ...shadows.sm,
-                  }}
-                  onPress={() => deleteSlot(slot._id)}
-                  disabled={loading === 'delete-slot'}
-                >
-                  <Text style={{ fontSize: 18 }}>
-                    {loading === 'delete-slot' ? '⏳' : '🗑️'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            );
-          })
+                slot={slot}
+                terrain={terrains.find(t => t._id === slot.terrainId)}
+                index={index}
+                onDelete={() => deleteSlot(slot._id)}
+                loading={loading === 'delete'}
+              />
+            ))}
+            <View style={{ marginTop: spacing['3'] }}>
+              <Button onPress={() => setShowCreateModal(true)} icon="➕">
+                Nouveau créneau
+              </Button>
+            </View>
+          </>
         )}
+
+        <View style={{ height: spacing['10'] }} />
       </View>
 
       {/* Create Slot Modal */}
-      <Modal visible={showCreateModal} animationType="slide" transparent>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: spacing.lg }}>
-          <View style={{ backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg }}>
-            <Text style={{ fontSize: 18, fontWeight: '600', color: colors.text, marginBottom: spacing.lg }}>
-              Nouveau Créneau - {new Date(selectedDate + 'T00:00:00').toLocaleDateString('fr-FR')}
-            </Text>
-
-            <Text style={{ color: colors.text, marginBottom: spacing.xs }}>Terrain</Text>
-            <View style={{ marginBottom: spacing.md }}>
-              {terrains.map(terrain => (
-                <TouchableOpacity
-                  key={terrain._id}
-                  style={{
-                    padding: spacing.md,
-                    backgroundColor: selectedTerrain === terrain._id ? colors.primary + '20' : colors.background,
-                    borderRadius: radius.md,
-                    marginBottom: spacing.xs,
-                    borderWidth: selectedTerrain === terrain._id ? 2 : 1,
-                    borderColor: selectedTerrain === terrain._id ? colors.primary : colors.border,
-                  }}
-                  onPress={() => setSelectedTerrain(terrain._id)}
-                >
-                  <Text style={{ color: colors.text, fontWeight: selectedTerrain === terrain._id ? '600' : '400' }}>
-                    {terrain.name}
-                  </Text>
-                  {terrain.address && (
-                    <Text style={{ color: colors.textMuted, fontSize: 12 }}>📍 {terrain.address}</Text>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={{ color: colors.text, marginBottom: spacing.xs }}>Heure</Text>
-            <TextInput
-              value={selectedTime}
-              onChangeText={setSelectedTime}
-              placeholder="18:00"
-              style={{
-                borderWidth: 1,
-                borderColor: colors.border,
-                borderRadius: radius.md,
-                padding: spacing.md,
-                marginBottom: spacing.lg,
-                backgroundColor: colors.background,
-                color: colors.text,
-              }}
-            />
-
-            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+      <BottomSheet visible={showCreateModal} onClose={() => setShowCreateModal(false)} title="Nouveau créneau">
+        <Text style={{ color: colors.textMuted, marginBottom: spacing['4'] }}>
+          📅 {new Date(selectedDate + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+        </Text>
+        
+        <Text style={{ color: colors.textMuted, fontSize: font.xs, fontWeight: font.bold, letterSpacing: 1, marginBottom: spacing['2'] }}>
+          TERRAIN
+        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing['4'] }}>
+          <View style={{ flexDirection: 'row', gap: spacing['2'] }}>
+            {terrains.map(t => (
               <TouchableOpacity
+                key={t._id}
+                onPress={() => setSelectedTerrain(t._id)}
                 style={{
-                  flex: 1,
-                  backgroundColor: colors.textMuted,
-                  padding: spacing.md,
-                  borderRadius: radius.md,
-                  alignItems: 'center',
+                  backgroundColor: selectedTerrain === t._id ? colors.brand : colors.bgElevated,
+                  padding: spacing['3'], borderRadius: radius.lg, minWidth: 100,
                 }}
-                onPress={() => setShowCreateModal(false)}
               >
-                <Text style={{ color: 'white', fontWeight: '600' }}>Annuler</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={{
-                  flex: 1,
-                  backgroundColor: colors.primary,
-                  padding: spacing.md,
-                  borderRadius: radius.md,
-                  alignItems: 'center',
-                }}
-                onPress={createSlot}
-                disabled={loading === 'create-slot'}
-              >
-                <Text style={{ color: 'white', fontWeight: '600' }}>
-                  {loading === 'create-slot' ? 'Création...' : 'Créer'}
+                <Text style={{ color: selectedTerrain === t._id ? colors.gray950 : colors.textPrimary, fontWeight: font.semibold }}>
+                  {t.name}
                 </Text>
               </TouchableOpacity>
-            </View>
+            ))}
+          </View>
+        </ScrollView>
+
+        <Input value={selectedTime} onChangeText={setSelectedTime} label="Heure" placeholder="18:00" icon="🕐" />
+        
+        <View style={{ flexDirection: 'row', gap: spacing['3'] }}>
+          <View style={{ flex: 1 }}>
+            <Button onPress={() => setShowCreateModal(false)} variant="secondary">Annuler</Button>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Button onPress={createSlot} loading={loading === 'create-slot'} icon="✓">Créer</Button>
           </View>
         </View>
-      </Modal>
+      </BottomSheet>
 
       {/* Create Terrain Modal */}
-      <Modal visible={showTerrainModal} animationType="slide" transparent>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: spacing.lg }}>
-          <View style={{ backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg }}>
-            <Text style={{ fontSize: 18, fontWeight: '600', color: colors.text, marginBottom: spacing.lg }}>
-              Nouveau Terrain
-            </Text>
+      <BottomSheet visible={showTerrainModal} onClose={() => setShowTerrainModal(false)} title="🏟️ Nouveau terrain">
+        <Input value={newTerrainName} onChangeText={setNewTerrainName} label="Nom" placeholder="City Park" icon="🏟️" />
+        <Input value={newTerrainAddress} onChangeText={setNewTerrainAddress} label="Adresse (optionnelle)" placeholder="Rue du Stade" icon="📍" />
+        
+        <View style={{ flexDirection: 'row', gap: spacing['3'] }}>
+          <View style={{ flex: 1 }}>
+            <Button onPress={() => setShowTerrainModal(false)} variant="secondary">Annuler</Button>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Button onPress={createTerrain} loading={loading === 'create-terrain'} icon="✓">Créer</Button>
+          </View>
+        </View>
+      </BottomSheet>
 
-            <Text style={{ color: colors.text, marginBottom: spacing.xs }}>Nom du terrain</Text>
-            <TextInput
-              value={newTerrainName}
-              onChangeText={setNewTerrainName}
-              placeholder="City Park"
-              style={{
-                borderWidth: 1,
-                borderColor: colors.border,
-                borderRadius: radius.md,
-                padding: spacing.md,
-                marginBottom: spacing.md,
-                backgroundColor: colors.background,
-                color: colors.text,
-              }}
-            />
-
-            <Text style={{ color: colors.text, marginBottom: spacing.xs }}>Adresse (optionnelle)</Text>
-            <TextInput
-              value={newTerrainAddress}
-              onChangeText={setNewTerrainAddress}
-              placeholder="Rue du Stade, 75000 Paris"
-              style={{
-                borderWidth: 1,
-                borderColor: colors.border,
-                borderRadius: radius.md,
-                padding: spacing.md,
-                marginBottom: spacing.lg,
-                backgroundColor: colors.background,
-                color: colors.text,
-              }}
-            />
-
-            <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+      {/* Template Modal */}
+      <BottomSheet visible={showTemplateModal} onClose={() => setShowTemplateModal(false)} title="📋 Templates">
+        <Text style={{ color: colors.textMuted, fontSize: font.xs, fontWeight: font.bold, letterSpacing: 1, marginBottom: spacing['2'] }}>
+          TERRAIN
+        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing['5'] }}>
+          <View style={{ flexDirection: 'row', gap: spacing['2'] }}>
+            {terrains.map(t => (
               <TouchableOpacity
+                key={t._id}
+                onPress={() => setSelectedTerrain(t._id)}
                 style={{
-                  flex: 1,
-                  backgroundColor: colors.textMuted,
-                  padding: spacing.md,
-                  borderRadius: radius.md,
-                  alignItems: 'center',
+                  backgroundColor: selectedTerrain === t._id ? colors.brand : colors.bgElevated,
+                  padding: spacing['3'], borderRadius: radius.lg, minWidth: 100,
                 }}
-                onPress={() => setShowTerrainModal(false)}
               >
-                <Text style={{ color: 'white', fontWeight: '600' }}>Annuler</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={{
-                  flex: 1,
-                  backgroundColor: colors.primary,
-                  padding: spacing.md,
-                  borderRadius: radius.md,
-                  alignItems: 'center',
-                }}
-                onPress={createTerrain}
-                disabled={loading === 'create-terrain'}
-              >
-                <Text style={{ color: 'white', fontWeight: '600' }}>
-                  {loading === 'create-terrain' ? 'Création...' : 'Créer'}
+                <Text style={{ color: selectedTerrain === t._id ? colors.gray950 : colors.textPrimary, fontWeight: font.semibold }}>
+                  {t.name}
                 </Text>
               </TouchableOpacity>
-            </View>
+            ))}
           </View>
+        </ScrollView>
+
+        <Button onPress={createWeekTemplate} loading={loading === 'template'} variant="lime" icon="📅" size="lg">
+          Semaine Type (Lun-Ven 18h-20h)
+        </Button>
+        <View style={{ marginTop: spacing['3'] }}>
+          <Button onPress={() => setShowTemplateModal(false)} variant="secondary">Fermer</Button>
         </View>
-      </Modal>
-
-      {/* Templates Modal */}
-      <Modal visible={showTemplateModal} animationType="slide" transparent>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: spacing.lg }}>
-          <View style={{ backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.lg }}>
-            <Text style={{ fontSize: 18, fontWeight: '600', color: colors.text, marginBottom: spacing.lg }}>
-              Templates de Créneaux
-            </Text>
-
-            <Text style={{ color: colors.text, marginBottom: spacing.xs }}>Terrain pour le template</Text>
-            <View style={{ marginBottom: spacing.lg }}>
-              {terrains.map(terrain => (
-                <TouchableOpacity
-                  key={terrain._id}
-                  style={{
-                    padding: spacing.md,
-                    backgroundColor: selectedTerrain === terrain._id ? colors.primary + '20' : colors.background,
-                    borderRadius: radius.md,
-                    marginBottom: spacing.xs,
-                    borderWidth: selectedTerrain === terrain._id ? 2 : 1,
-                    borderColor: selectedTerrain === terrain._id ? colors.primary : colors.border,
-                  }}
-                  onPress={() => setSelectedTerrain(terrain._id)}
-                >
-                  <Text style={{ color: colors.text, fontWeight: selectedTerrain === terrain._id ? '600' : '400' }}>
-                    {terrain.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <TouchableOpacity
-              style={{
-                backgroundColor: colors.success,
-                padding: spacing.lg,
-                borderRadius: radius.md,
-                alignItems: 'center',
-                marginBottom: spacing.md,
-              }}
-              onPress={createWeekTemplate}
-              disabled={loading === 'template'}
-            >
-              <Text style={{ color: 'white', fontWeight: '600', fontSize: 16 }}>
-                📅 Semaine Type (Lun-Ven 18h-20h)
-              </Text>
-              <Text style={{ color: 'white', fontSize: 12, marginTop: spacing.xs }}>
-                Crée 5 créneaux de 2h à partir du {new Date(selectedDate + 'T00:00:00').toLocaleDateString('fr-FR')}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={{
-                backgroundColor: colors.textMuted,
-                padding: spacing.md,
-                borderRadius: radius.md,
-                alignItems: 'center',
-              }}
-              onPress={() => setShowTemplateModal(false)}
-            >
-              <Text style={{ color: 'white', fontWeight: '600' }}>Fermer</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      </BottomSheet>
     </ScrollView>
   );
 }

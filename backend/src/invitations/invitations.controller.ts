@@ -51,7 +51,7 @@ export class InvitationsController {
     const updated = await this.reservationsService.atomicAccept(tokenHash, slot.capacity);
     if (!updated) {
       // full or race beyond capacity
-      return { statusCode: 409, message: 'FULL' };
+      throw new HttpException('Capacité atteinte (FULL)', HttpStatus.CONFLICT);
     }
 
     if (updated.acceptedCount >= slot.capacity) {
@@ -62,10 +62,13 @@ export class InvitationsController {
   }
 
   @Post(':token/decline')
-  @ApiResponse({ status: 204, description: 'Déclinaison enregistrée (no-op)' })
+  @ApiResponse({ status: 200, description: 'Déclinaison enregistrée' })
   @ApiResponse({ status: 404, description: 'Invitation introuvable' })
-  decline() {
-    // No-op by spec
-    return { statusCode: 204 };
+  async decline(@Param('token') token: string) {
+    const tokenHash = this.hash(token);
+    const reservation = await this.reservationsService.findByTokenHash(tokenHash);
+    if (!reservation) throw new HttpException('not found', HttpStatus.NOT_FOUND);
+    // No-op by spec - juste vérifier que l'invitation existe
+    return { message: 'declined' };
   }
 }
