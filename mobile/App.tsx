@@ -7,7 +7,7 @@ import SlotsList from './app/screens/SlotsList';
 import SlotDetail from './app/screens/SlotDetail';
 import InviteLanding from './app/screens/InviteLanding';
 import type { RootStackParamList } from './app/navigation/types';
-import { colors } from './app/theme';
+import { colors, spacing, radius } from './app/theme';
 import Reservations from './app/screens/Reservations';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Login from './app/screens/Login';
@@ -15,26 +15,20 @@ import Profile from './app/screens/Profile';
 import { UserProvider } from './app/state/UserContext';
 import CalendarAdmin from './app/screens/CalendarAdmin';
 import { useUser } from './app/state/UserContext';
-import { databaseService } from './app/services/database';
-
-// Exposer la fonction pour la démo (accessible dans la console du navigateur)
-if (typeof window !== 'undefined') {
-  (window as any).showBDD = () => databaseService.showAllData();
-  console.log('💡 Pour afficher le contenu de la BDD locale, tapez: showBDD()');
-}
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const RootStack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
 
-function TerrainsStack() {
+function SlotsStack() {
   return (
     <Stack.Navigator
       initialRouteName="SlotsList"
       screenOptions={{
-        headerStyle: { backgroundColor: colors.primarySoft },
+        headerStyle: { backgroundColor: colors.bgCard },
         headerShadowVisible: false,
-        headerTitleStyle: { color: colors.text },
+        headerTitleStyle: { color: colors.textPrimary },
+        headerTintColor: colors.textPrimary,
       }}
     >
       <Stack.Screen name="SlotsList" component={SlotsList} options={{ headerShown: false }} />
@@ -48,9 +42,10 @@ function ReservationsStack() {
   return (
     <Stack.Navigator
       screenOptions={{
-        headerStyle: { backgroundColor: colors.primarySoft },
+        headerStyle: { backgroundColor: colors.bgCard },
         headerShadowVisible: false,
-        headerTitleStyle: { color: colors.text },
+        headerTitleStyle: { color: colors.textPrimary },
+        headerTintColor: colors.textPrimary,
       }}
     >
       <Stack.Screen name="ReservationsList" component={Reservations} options={{ headerShown: false }} />
@@ -65,12 +60,22 @@ function MainTabs() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: '#C1C7D0',
-        tabBarStyle: { backgroundColor: '#fff', borderTopColor: '#E5E7EB' },
+        tabBarActiveTintColor: colors.brand,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarStyle: { 
+          backgroundColor: colors.bgCard, 
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+          paddingTop: spacing['2'],
+          height: 60,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+        },
         tabBarIcon: ({ color, size, focused }) => {
           const name =
-            route.name === 'Terrains'
+            route.name === 'Créneaux'
               ? (focused ? 'football' : 'football-outline')
               : route.name === 'Réservations'
               ? (focused ? 'calendar' : 'calendar-outline')
@@ -81,7 +86,7 @@ function MainTabs() {
         },
       })}
     >
-      <Tab.Screen name="Terrains" component={TerrainsStack} />
+      <Tab.Screen name="Créneaux" component={SlotsStack} />
       <Tab.Screen name="Réservations" component={ReservationsStack} />
       <Tab.Screen name="Profil" component={Profile} />
       {isAdmin && <Tab.Screen name="Admin" component={CalendarAdmin} />}
@@ -93,7 +98,7 @@ export default function App() {
   return (
     <UserProvider>
       <NavigationContainer>
-        <StatusBar barStyle="dark-content" />
+        <StatusBar barStyle="light-content" />
         <RootStack.Navigator screenOptions={{ headerShown: false }}>
           <RootStack.Screen name="Login" component={Login} />
           <RootStack.Screen name="MainTabs" component={MainTabs} />
